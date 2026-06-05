@@ -6,9 +6,17 @@ export type Vacancy = {
   title?: string;
   companyName?: string;
   description?: string;
+  requirements?: string[];
   skills?: string[];
   experienceLevel?: string;
   type?: string;
+  salaryMin?: number;
+  salaryMax?: number;
+  currency?: string;
+  location?: string;
+  applicantCount?: number;
+  hasAssessment?: boolean;
+  status?: string;
   [key: string]: unknown;
 };
 

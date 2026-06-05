@@ -97,6 +97,63 @@ function serializeAnswers(
     .filter((a) => includeEmpty || a.answer);
 }
 
+function isPracticalQuestion(q: Record<string, unknown>) {
+  return String(q.questionType) === 'practical_task';
+}
+
+function countAnswered(
+  questions: Record<string, unknown>[],
+  map: Record<string, string>,
+): number {
+  return questions.filter((q) => String(map[String(q.id)] || '').trim()).length;
+}
+
+function computeSessionStats(
+  questions: Record<string, unknown>[],
+  map: Record<string, string>,
+  assessment: Record<string, unknown>,
+  evaluation: Record<string, unknown>,
+) {
+  const theoryQs = questions.filter((q) => !isPracticalQuestion(q));
+  const practicalQs = questions.filter((q) => isPracticalQuestion(q));
+  const totalQuestions =
+    typeof evaluation.totalQuestions === 'number' ? evaluation.totalQuestions : questions.length;
+  const answeredQuestions =
+    typeof evaluation.answeredQuestions === 'number'
+      ? evaluation.answeredQuestions
+      : countAnswered(questions, map);
+
+  const startedAt = assessment.startedAt;
+  const submittedAt = assessment.submittedAt;
+  let avgTimeSec: number | null = null;
+  if (startedAt && submittedAt && totalQuestions > 0) {
+    const ms =
+      new Date(String(submittedAt)).getTime() - new Date(String(startedAt)).getTime();
+    if (ms > 0) {
+      avgTimeSec = Math.round((ms / 1000 / totalQuestions) * 10) / 10;
+    }
+  }
+
+  return {
+    totalQuestions,
+    answeredQuestions,
+    avgTimeSec,
+    overallScore: typeof evaluation.overallScore === 'number' ? evaluation.overallScore : null,
+    theoryTotal: theoryQs.length,
+    theoryAnswered: countAnswered(theoryQs, map),
+    practicalTotal: practicalQs.length,
+    practicalAnswered: countAnswered(practicalQs, map),
+  };
+}
+
+function fmtAvgTime(secs: number | null): string {
+  if (secs == null || secs <= 0) return '—';
+  if (secs < 60) return `${Math.round(secs)} с`;
+  const minutes = Math.floor(secs / 60);
+  const rest = Math.round(secs % 60);
+  return `${minutes} мин ${rest} с`;
+}
+
 export default function SkillSessionDetailScreen({ route, navigation }: Props) {
   const { sessionId } = route.params;
   const { colors } = useAppTheme();
@@ -282,6 +339,7 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
   const progress =
     questions.length > 0 ? Math.round(((currentIndex + 1) / questions.length) * 100) : 0;
   const answeredCount = questions.filter((q) => String(answers[String(q.id)] || '').trim()).length;
+  const sessionStats = computeSessionStats(questions, answers, assessment, evaluation);
 
   const showTestRunner =
     status === 'in_progress' && isStarted && questions.length > 0 && !isCompleted;
@@ -326,6 +384,60 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
           ) : null}
 
           {isCompleted ? (
+            <>
+            <View style={s.statsSection}>
+              <View style={s.statsSectionHead}>
+                <Ionicons name="stats-chart-outline" size={22} color={colors.accent} />
+                <Text style={s.statsSectionTitle}>Теория / Результаты</Text>
+              </View>
+
+              <View style={s.statsGrid}>
+                <View style={s.statCard}>
+                  <Ionicons name="help-circle-outline" size={20} color={colors.accent} />
+                  <Text style={s.statValue}>{sessionStats.totalQuestions}</Text>
+                  <Text style={s.statLabel}>Жалпы сұрақтар</Text>
+                </View>
+                <View style={s.statCard}>
+                  <Ionicons name="time-outline" size={20} color={colors.accent} />
+                  <Text style={s.statValue}>{fmtAvgTime(sessionStats.avgTimeSec)}</Text>
+                  <Text style={s.statLabel}>Орташа уақыт</Text>
+                </View>
+                <View style={s.statCard}>
+                  <Ionicons name="trophy-outline" size={20} color={colors.accent} />
+                  <Text style={s.statValue}>
+                    {sessionStats.overallScore != null ? `${sessionStats.overallScore}%` : '—'}
+                  </Text>
+                  <Text style={s.statLabel}>Балл</Text>
+                </View>
+              </View>
+
+              <View style={s.typeBreakdown}>
+                <View style={s.typeRow}>
+                  <View style={s.typeRowLeft}>
+                    <Ionicons name="book-outline" size={18} color={colors.ink2} />
+                    <Text style={s.typeLabel}>Теориялық сұрақтар</Text>
+                  </View>
+                  <Text style={s.typeScore}>
+                    {sessionStats.theoryAnswered}/{sessionStats.theoryTotal}
+                  </Text>
+                </View>
+                <View style={s.typeDivider} />
+                <View style={s.typeRow}>
+                  <View style={s.typeRowLeft}>
+                    <Ionicons name="code-slash-outline" size={18} color={colors.ink2} />
+                    <Text style={s.typeLabel}>Практикалық сұрақтар</Text>
+                  </View>
+                  <Text style={s.typeScore}>
+                    {sessionStats.practicalAnswered}/{sessionStats.practicalTotal}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={s.statsFootnote}>
+                {sessionStats.answeredQuestions}/{sessionStats.totalQuestions} жауап берілді
+              </Text>
+            </View>
+
             <View style={s.card}>
               <View style={s.resultHead}>
                 <Ionicons name="ribbon-outline" size={28} color={colors.accent} />
@@ -363,6 +475,7 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
                 </>
               ) : null}
             </View>
+            </>
           ) : null}
 
           {status === 'ready' ? (
@@ -664,6 +777,73 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
       paddingHorizontal: 8,
     },
     btnGhostTxt: { fontSize: 16, fontWeight: '600', color: colors.ink },
+    statsSection: {
+      borderWidth: 1,
+      borderColor: colors.line,
+      padding: 16,
+      marginBottom: 14,
+      backgroundColor: colors.surface2,
+      gap: 16,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 6,
+        },
+        android: { elevation: 2 },
+      }),
+    },
+    statsSectionHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    statsSectionTitle: { fontSize: 18, fontWeight: '700', color: colors.ink },
+    statsGrid: { flexDirection: 'row', gap: 10 },
+    statCard: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 14,
+      paddingHorizontal: 8,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.line,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 3,
+        },
+        android: { elevation: 1 },
+      }),
+    },
+    statValue: { fontSize: 20, fontWeight: '800', color: colors.ink, marginTop: 2 },
+    statLabel: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.ink3,
+      textAlign: 'center',
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    typeBreakdown: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.line,
+      paddingHorizontal: 14,
+      paddingVertical: 4,
+    },
+    typeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 12,
+      gap: 12,
+    },
+    typeRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+    typeLabel: { fontSize: 14, fontWeight: '600', color: colors.ink2, flex: 1 },
+    typeScore: { fontSize: 16, fontWeight: '800', color: colors.accent },
+    typeDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
+    statsFootnote: { fontSize: 13, color: colors.ink3, textAlign: 'center' },
     resultHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
     scoreRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 8 },
     scoreBig: { fontSize: 40, fontWeight: '800', color: colors.accent },

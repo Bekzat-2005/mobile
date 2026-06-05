@@ -3,6 +3,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   LayoutAnimation,
   Modal,
@@ -268,6 +269,15 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
   const latestAttempt = sheetTopic
     ? (asArray<Record<string, unknown>>(sheetTopic.attempts).slice(-1)[0] as Record<string, unknown> | undefined)
     : undefined;
+  const sheetTheorySummary = sheetTopic ? String(sheetTopic.theorySummary || '').trim() : '';
+  const sheetTheorySections = sheetTopic
+    ? asArray<Record<string, unknown>>(sheetTopic.theorySections)
+    : [];
+  const hasTheoryContent = Boolean(sheetTheorySummary || sheetTheorySections.length);
+
+  function onEnhanceTheory() {
+    Alert.alert('Дополнить теорию', 'Функция будет доступна в следующей версии.');
+  }
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -679,12 +689,54 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
                   </Pressable>
                 ) : null}
 
+                {sheetGenState === 'completed' && hasTheoryContent ? (
+                  <>
+                    <View style={s.theorySection}>
+                      <View style={s.theoryHead}>
+                        <View style={s.theoryHeadText}>
+                          <Text style={s.theoryKicker}>теория</Text>
+                          <Text style={s.theoryTitle}>Главная идея</Text>
+                        </View>
+                        <Pressable style={s.theoryEnhanceBtn} onPress={onEnhanceTheory}>
+                          <Text style={s.theoryEnhanceBtnTxt}>Дополнить теорию</Text>
+                        </Pressable>
+                      </View>
+                      {sheetTheorySummary ? (
+                        <Text style={s.theorySummary}>{sheetTheorySummary}</Text>
+                      ) : null}
+                    </View>
+
+                    {sheetTheorySections.length > 0 ? (
+                      <View style={s.blocksSection}>
+                        <Text style={s.blocksTitle}>Разбор по блокам</Text>
+                        <View style={s.blocksList}>
+                          {sheetTheorySections.map((sec, i) => (
+                            <View key={`${String(sec.title || i)}-${i}`} style={s.blockRow}>
+                              <Text style={s.blockNum}>{i + 1}</Text>
+                              <View style={s.blockBody}>
+                                {sec.title ? (
+                                  <Text style={s.blockTitle}>{String(sec.title)}</Text>
+                                ) : null}
+                                {sec.content ? (
+                                  <Text style={s.blockText}>{String(sec.content)}</Text>
+                                ) : null}
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </>
+                ) : null}
+
                 {sheetGenState === 'completed' && sheetQuizQuestions.length === 0 ? (
                   <Text style={s.body}>Вопросов теста нет. Обновите сессию или обратитесь в поддержку.</Text>
                 ) : null}
 
                 {sheetGenState === 'completed' && sheetQuizQuestions.length > 0 ? (
                   <>
+                    <Text style={s.quizSectionTitle}>Мини-тест</Text>
+
                     {latestAttempt ? (
                       <View style={s.attemptBox}>
                         <Text style={s.attemptTitle}>Последняя попытка</Text>
@@ -965,6 +1017,60 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
     modalTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.ink, paddingHorizontal: 8 },
     modalBody: { padding: 16, paddingBottom: 40 },
     modalHint: { fontSize: 14, color: colors.ink2, lineHeight: 21, marginBottom: 16 },
+    theorySection: {
+      marginBottom: 20,
+      paddingLeft: 14,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.accentMuted,
+      gap: 12,
+    },
+    theoryHead: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    theoryHeadText: { flex: 1, gap: 4 },
+    theoryKicker: {
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 1.6,
+      textTransform: 'uppercase',
+      color: colors.ink3,
+    },
+    theoryTitle: { fontSize: 18, fontWeight: '700', color: colors.ink, lineHeight: 24 },
+    theoryEnhanceBtn: {
+      borderWidth: 1,
+      borderColor: colors.accent,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      backgroundColor: colors.surface,
+    },
+    theoryEnhanceBtnTxt: { fontSize: 12, fontWeight: '600', color: colors.accent },
+    theorySummary: { fontSize: 15, color: colors.ink2, lineHeight: 24 },
+    blocksSection: { marginBottom: 24, gap: 14 },
+    blocksTitle: { fontSize: 18, fontWeight: '700', color: colors.ink, lineHeight: 24 },
+    blocksList: { gap: 16 },
+    blockRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+    blockNum: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.ink3,
+      minWidth: 20,
+      marginTop: 2,
+    },
+    blockBody: { flex: 1, gap: 6 },
+    blockTitle: { fontSize: 16, fontWeight: '700', color: colors.ink, lineHeight: 22 },
+    blockText: { fontSize: 15, color: colors.ink2, lineHeight: 23 },
+    quizSectionTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.ink,
+      marginBottom: 14,
+      paddingTop: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.line,
+    },
     modalBanner: {
       flexDirection: 'row',
       alignItems: 'center',
