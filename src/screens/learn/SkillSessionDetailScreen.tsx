@@ -378,12 +378,12 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
                 <View style={s.statCard}>
                   <Ionicons name="help-circle-outline" size={20} color={colors.accent} />
                   <Text style={s.statValue}>{sessionStats.totalQuestions}</Text>
-                  <Text style={s.statLabel}>Жалпы сұрақтар</Text>
+                  <Text style={s.statLabel}>Общие вопросы</Text>
                 </View>
                 <View style={s.statCard}>
                   <Ionicons name="time-outline" size={20} color={colors.accent} />
                   <Text style={s.statValue}>{fmtAvgTime(sessionStats.avgTimeSec)}</Text>
-                  <Text style={s.statLabel}>Орташа уақыт</Text>
+                  <Text style={s.statLabel}>Среднее время</Text>
                 </View>
                 <View style={s.statCard}>
                   <Ionicons name="trophy-outline" size={20} color={colors.accent} />
@@ -398,7 +398,7 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
                 <View style={s.typeRow}>
                   <View style={s.typeRowLeft}>
                     <Ionicons name="book-outline" size={18} color={colors.ink2} />
-                    <Text style={s.typeLabel}>Теориялық сұрақтар</Text>
+                    <Text style={s.typeLabel}>Теоретические вопросы</Text>
                   </View>
                   <Text style={s.typeScore}>
                     {sessionStats.theoryAnswered}/{sessionStats.theoryTotal}
@@ -408,7 +408,7 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
                 <View style={s.typeRow}>
                   <View style={s.typeRowLeft}>
                     <Ionicons name="code-slash-outline" size={18} color={colors.ink2} />
-                    <Text style={s.typeLabel}>Практикалық сұрақтар</Text>
+                    <Text style={s.typeLabel}>Практические вопросы</Text>
                   </View>
                   <Text style={s.typeScore}>
                     {sessionStats.practicalAnswered}/{sessionStats.practicalTotal}
@@ -417,7 +417,7 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
               </View>
 
               <Text style={s.statsFootnote}>
-                {sessionStats.answeredQuestions}/{sessionStats.totalQuestions} жауап берілді
+                {sessionStats.answeredQuestions}/{sessionStats.totalQuestions} ответы
               </Text>
             </View>
 
