@@ -23,28 +23,11 @@ import {
   startSkillAssessmentSession,
   submitSkillAssessmentSession,
 } from '../../api/skill-assessment';
+import { formatSkillLevel, formatSkillStatus } from '../../lib/status-labels';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
 
 type Props = NativeStackScreenProps<LearnStackParamList, 'SkillSessionDetail'>;
-
-const STATUS_RU: Record<string, string> = {
-  ready: 'Готов к старту',
-  in_progress: 'В работе',
-  completed: 'Завершён',
-};
-
-const LEVEL_RU: Record<string, string> = {
-  trainee: 'Стажёр',
-  junior: 'Начинающий',
-  junior_plus: 'Начинающий+',
-  hard_junior: 'Уверенный начинающий',
-  middle: 'Средний',
-  senior: 'Старший',
-  beginner: 'Начинающий',
-  intermediate: 'Начинающий+',
-  advanced: 'Уверенный начинающий',
-};
 
 const QUESTION_TYPE_RU: Record<string, string> = {
   open_ended: 'Открытый вопрос',
@@ -318,13 +301,13 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
   }
 
   const status = String(session.status || '');
-  const statusRu = STATUS_RU[status] || status;
+  const statusRu = formatSkillStatus(status);
   const targetLevel = String(session.targetLevel || '');
-  const levelRu = LEVEL_RU[targetLevel] || targetLevel;
+  const levelRu = formatSkillLevel(targetLevel);
   const domainTitle = String(session.domainLabel || session.domainKey || 'Оценка');
   const assessment = getAssessment(session);
   const questions = getQuestions(session);
-  const intro = String(assessment.introduction || '');
+  const intro = '';
   const assessmentTitle = String(assessment.title || 'Тест навыков');
   const estMinutes = typeof assessment.estimatedDurationMinutes === 'number' ? assessment.estimatedDurationMinutes : 25;
   const startedAt = assessment.startedAt;
@@ -450,7 +433,7 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
               <Text style={s.resultLevel}>
                 Подтверждённый уровень:{' '}
                 <Text style={s.resultLevelStrong}>
-                  {LEVEL_RU[String(evaluation.validatedLevel)] || String(evaluation.validatedLevel || '')}
+                  {formatSkillLevel(String(evaluation.validatedLevel || ''))}
                 </Text>
               </Text>
               {evaluation.summary ? <Text style={s.body}>{String(evaluation.summary)}</Text> : null}

@@ -33,24 +33,11 @@ import {
   type NotebookNote,
   type NotebookSourceContext,
 } from '../../api/notebook';
+import { formatCareerStatus, formatTopicStatus } from '../../lib/status-labels';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
 
 type Props = NativeStackScreenProps<LearnStackParamList, 'CareerSessionDetail'>;
-
-const STATUS_RU: Record<string, string> = {
-  assessment_ready: 'Готов к тесту',
-  awaiting_skill_confirmation: 'Подтверждение навыков',
-  roadmap_generating: 'Генерация плана',
-  roadmap_ready: 'План готов',
-  roadmap_failed: 'Ошибка генерации',
-};
-
-const TOPIC_STATUS_RU: Record<string, string> = {
-  locked: 'Заблокировано',
-  available: 'Доступно',
-  completed: 'Завершено',
-};
 
 /** Как на бэкенде career.service TOPIC_REVIEW_PASS_THRESHOLD */
 const QUIZ_PASS_PERCENT = 60;
@@ -401,23 +388,14 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
   const gen = asRecord(session.generation);
   const status = String(session.status || '');
   const phases = asArray<Record<string, unknown>>(result.phases);
-  const roadmapTitle = String(result.roadmapTitle || '');
-  const roadmapSummary = String(result.roadmapSummary || '');
-  const summaryShort = String(result.summary || '');
-  const currentStage = String(result.currentStage || '');
   const readinessScore = typeof result.readinessScore === 'number' ? result.readinessScore : null;
   const monthsToReady =
     typeof result.estimatedMonthsToJobReady === 'number' ? result.estimatedMonthsToJobReady : null;
 
-  const strengths = asArray<string>(result.strengths);
-  const improvementAreas = asArray<string>(result.improvementAreas);
-  const recommendedFocus = asArray<string>(result.recommendedFocus);
-  const milestones = asArray<string>(result.milestoneExpectations);
-
   const { total: topicTotal, completed: topicDone } = countTopicProgress(phases);
   const progressPct = topicTotal > 0 ? Math.round((topicDone / topicTotal) * 100) : 0;
 
-  const statusLabel = STATUS_RU[status] || status;
+  const statusLabel = formatCareerStatus(status);
 
   const sheetTopic = topicSheetId ? findTopicById(session, topicSheetId) : null;
   const sheetGen = sheetTopic ? asRecord(sheetTopic.contentGeneration) : {};
@@ -452,126 +430,47 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
           />
         }
       >
-        <Text style={s.h1}>{String(session.directionLabel || '')}</Text>
-        <Text style={s.sub}>{String(session.targetRole || '')}</Text>
-
-        <View style={s.statusPill}>
-          <Text style={s.statusPillText}>{statusLabel}</Text>
-        </View>
-
-        {gen?.message ? <Text style={s.gen}>{String(gen.message)}</Text> : null}
-        {gen?.progressMessage ? (
-          <Text style={s.genMuted}>{String(gen.progressMessage)}</Text>
-        ) : null}
-
-        {roadmapTitle ? <Text style={s.sectionHead}>{roadmapTitle}</Text> : null}
-
-        {/* Обзор */}
-        <View style={s.card}>
-          <Text style={s.cardEyebrow}>Обзор</Text>
-          {readinessScore != null ? (
-            <View style={s.metricRow}>
-              <Text style={s.metricLabel}>Готовность</Text>
-              <Text style={s.metricValue}>{readinessScore}%</Text>
-            </View>
+        <View style={s.headerCard}>
+          <Text style={s.h1}>{String(session.directionLabel || '')}</Text>
+          {String(session.targetRole || '') ? (
+            <Text style={s.sub}>{String(session.targetRole)}</Text>
           ) : null}
-          {monthsToReady != null && monthsToReady > 0 ? (
-            <View style={s.metricRow}>
-              <Text style={s.metricLabel}>До job-ready (оценка)</Text>
-              <Text style={s.metricValue}>{monthsToReady} мес.</Text>
+          <View style={s.badgeRow}>
+            <View style={s.statusPill}>
+              <Text style={s.statusPillText}>{statusLabel}</Text>
             </View>
-          ) : null}
-          {currentStage ? (
-            <View style={s.stageBox}>
-              <Text style={s.stageLabel}>Текущий этап</Text>
-              <Text style={s.stageText}>{currentStage}</Text>
+            {readinessScore != null ? (
+              <View style={s.metricBadge}>
+                <Text style={s.metricBadgeTxt}>Готовность {readinessScore}%</Text>
+              </View>
+            ) : null}
+            {monthsToReady != null && monthsToReady > 0 ? (
+              <View style={s.metricBadge}>
+                <Text style={s.metricBadgeTxt}>~{monthsToReady} мес.</Text>
+              </View>
+            ) : null}
+          </View>
+          {topicTotal > 0 ? (
+            <View style={s.progressBlock}>
+              <View style={s.progressBarBg}>
+                <View style={[s.progressBarFill, { width: `${progressPct}%` }]} />
+              </View>
+              <Text style={s.progressCaption}>
+                {topicDone}/{topicTotal} тем · {progressPct}%
+              </Text>
             </View>
-          ) : null}
-          {summaryShort ? (
-            <>
-              {splitParagraphs(summaryShort).map((p, i) => (
-                <Text key={`sum-${i}`} style={[s.body, i > 0 && s.bodyGap]}>
-                  {p}
-                </Text>
-              ))}
-            </>
           ) : null}
         </View>
 
-        {topicTotal > 0 ? (
-          <View style={s.card}>
-            <Text style={s.cardEyebrow}>Прогресс по темам</Text>
-            <View style={s.progressBarBg}>
-              <View style={[s.progressBarFill, { width: `${progressPct}%` }]} />
-            </View>
-            <Text style={s.progressCaption}>
-              {topicDone} из {topicTotal} тем завершено ({progressPct}%)
-            </Text>
-          </View>
-        ) : null}
-
-        {roadmapSummary ? (
-          <View style={s.card}>
-            <Text style={s.cardEyebrow}>Дорожная карта (текст)</Text>
-            {splitParagraphs(roadmapSummary).map((p, i) => (
-              <Text key={`rs-${i}`} style={[s.body, i > 0 && s.bodyGap]}>
-                {p}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-
-        {strengths.length ? (
-          <View style={s.card}>
-            <Text style={s.cardEyebrow}>Сильные стороны</Text>
-            <View style={s.chipWrap}>
-              {strengths.map((t, i) => (
-                <View key={i} style={s.chip}>
-                  <Text style={s.chipText}>{t}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        {improvementAreas.length ? (
-          <View style={s.card}>
-            <Text style={s.cardEyebrow}>Зоны роста</Text>
-            {improvementAreas.map((t, i) => (
-              <Text key={i} style={s.bulletLine}>
-                • {t}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-
-        {recommendedFocus.length ? (
-          <View style={s.card}>
-            <Text style={s.cardEyebrow}>Фокус обучения</Text>
-            {recommendedFocus.map((t, i) => (
-              <Text key={i} style={s.bulletLine}>
-                • {t}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-
-        {milestones.length ? (
-          <View style={s.card}>
-            <Text style={s.cardEyebrow}>Вехи и ожидания</Text>
-            {milestones.map((t, i) => (
-              <Text key={i} style={s.bulletLine}>
-                {i + 1}. {t}
-              </Text>
-            ))}
-          </View>
+        {gen?.message && status === 'roadmap_generating' ? (
+          <Text style={s.genMuted}>{String(gen.message)}</Text>
         ) : null}
 
         {/* Структура: фазы → модули → темы */}
         {phases.length > 0 ? (
           <View style={s.structureBlock}>
             <Text style={s.structureTitle}>Структура плана</Text>
-            <Text style={s.structureHint}>Раскройте модуль — у темы сразу под названием кнопка мини-теста.</Text>
+            <Text style={s.structureHint}>Фазы и темы плана</Text>
             {phases.map((phase, pi) => {
               const order = typeof phase.order === 'number' ? phase.order : pi + 1;
               const open = openPhases[order] ?? pi === 0;
@@ -671,7 +570,7 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
 
                                 {topics.map((topic, ti) => {
                                   const st = topicProgressionStatus(topic);
-                                  const stLabel = TOPIC_STATUS_RU[st] || st;
+                                  const stLabel = formatTopicStatus(st);
                                   const hours =
                                     typeof topic.estimatedHours === 'number'
                                       ? topic.estimatedHours
@@ -761,7 +660,7 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
               );
             })}
           </View>
-        ) : status === 'roadmap_ready' && (roadmapSummary || roadmapTitle) ? (
+        ) : status === 'roadmap_ready' && phases.length === 0 ? (
           <View style={s.card}>
             <Text style={s.cardEyebrow}>Структура</Text>
             <Text style={s.body}>
@@ -1047,11 +946,26 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
     safe: { flex: 1, backgroundColor: colors.surface },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     scroll: { padding: 16, paddingBottom: 48 },
+    headerCard: {
+      borderWidth: 1,
+      borderColor: colors.line,
+      padding: 16,
+      marginBottom: 16,
+      backgroundColor: colors.surface2,
+    },
     h1: { fontSize: 22, fontWeight: '700', color: colors.ink },
-    sub: { fontSize: 15, color: colors.ink2, marginTop: 6 },
+    sub: { fontSize: 14, color: colors.ink3, marginTop: 4 },
+    badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+    metricBadge: {
+      paddingVertical: 4,
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderColor: colors.line,
+      backgroundColor: colors.surface,
+    },
+    metricBadgeTxt: { fontSize: 11, fontWeight: '600', color: colors.ink2 },
+    progressBlock: { marginTop: 14 },
     statusPill: {
-      alignSelf: 'flex-start',
-      marginTop: 12,
       backgroundColor: colors.accentMuted,
       paddingHorizontal: 12,
       paddingVertical: 6,

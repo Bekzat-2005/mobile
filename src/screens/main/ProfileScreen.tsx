@@ -25,29 +25,19 @@ import {
   updateCurrentUserProfile,
   type PointsHistoryEntry,
 } from '../../api/users';
+import { formatCareerStatus, formatSkillStatus, formatUserRole } from '../../lib/status-labels';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
 
-const CAREER_STATUS_RU: Record<string, string> = {
-  assessment_ready: 'Тест',
-  awaiting_skill_confirmation: 'Подтверждение',
-  roadmap_generating: 'Генерация плана',
-  roadmap_ready: 'План готов',
-  roadmap_failed: 'Ошибка',
-};
-
-const SKILL_STATUS_RU: Record<string, string> = {
-  draft: 'Черновик',
-  in_progress: 'В процессе',
-  completed: 'Завершено',
-  abandoned: 'Остановлено',
-};
-
-const ROLE_RU: Record<string, string> = {
-  user: 'Участник',
-  company: 'Компания',
-  admin: 'Администратор',
-};
+function splitDisplayName(full?: string) {
+  const parts = String(full || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return { firstName: '', lastName: '' };
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+}
 
 function formatRuDate(iso?: string): string {
   if (!iso) return '';
@@ -85,16 +75,14 @@ function sessionIdOf(s: Record<string, unknown>): string {
 }
 
 function buildEditForm(user: AuthUser | null) {
+  const { firstName, lastName } = splitDisplayName(user?.name);
   const contact = user?.contactInfo;
   return {
-    name: user?.name || '',
     username: user?.username || '',
+    firstName,
+    lastName,
     aboutMe: user?.aboutMe || '',
-    location: user?.location || '',
-    techStackText: Array.isArray(user?.techStack) ? user.techStack.join(', ') : '',
-    additionalInfo: user?.additionalInfo || '',
-    phone: contact?.phone || '',
-    telegram: contact?.telegram || '',
+    github: contact?.github || '',
   };
 }
 
@@ -198,32 +186,33 @@ export default function ProfileScreen() {
     }
   }
 
+  function openAdmin() {
+    navigation.navigate('AdminDashboard' as never);
+  }
+
   async function saveProfile() {
     if (!token || !user) return;
     setSaveError('');
     setSaving(true);
     try {
-      const techStack = editForm.techStackText
-        .split(',')
+      const name = [editForm.firstName, editForm.lastName]
         .map((x) => x.trim())
-        .filter(Boolean);
+        .filter(Boolean)
+        .join(' ');
       const payload: Record<string, unknown> = {
-        name: editForm.name.trim(),
+        name,
         username: editForm.username.trim(),
         aboutMe: editForm.aboutMe.trim(),
-        location: editForm.location.trim(),
-        additionalInfo: editForm.additionalInfo.trim(),
-        techStack,
         contactInfo: {
-          phone: editForm.phone.trim(),
-          telegram: editForm.telegram.trim(),
+          phone: user.contactInfo?.phone || '',
+          telegram: user.contactInfo?.telegram || '',
           linkedin: user.contactInfo?.linkedin || '',
-          github: user.contactInfo?.github || '',
+          github: editForm.github.trim(),
           visibility: user.contactInfo?.visibility || {
             phone: false,
             telegram: false,
             linkedin: false,
-            github: false,
+            github: true,
           },
         },
       };
@@ -276,16 +265,26 @@ export default function ProfileScreen() {
                 <Text style={s.displayName}>{user.name || user.username || 'Профиль'}</Text>
                 <Text style={s.handle}>@{user.username || '—'}</Text>
                 {user.role ? (
-                  <Text style={s.rolePill}>{ROLE_RU[String(user.role)] || user.role}</Text>
+                  <Text style={s.rolePill}>{formatUserRole(String(user.role))}</Text>
                 ) : null}
                 {user.createdAt ? (
                   <Text style={s.joined}>На платформе с {formatRuDate(user.createdAt)}</Text>
                 ) : null}
               </View>
-              <Pressable style={s.editFab} onPress={() => setEditOpen(true)} accessibilityLabel="Редактировать">
-                <Ionicons name="create-outline" size={22} color={colors.ink} />
-              </Pressable>
             </View>
+
+            <Pressable style={s.editProfileBtn} onPress={() => setEditOpen(true)}>
+              <Ionicons name="create-outline" size={18} color={colors.ink} />
+              <Text style={s.editProfileBtnTxt}>Редактировать профиль</Text>
+            </Pressable>
+
+            {user.role === 'admin' ? (
+              <Pressable style={s.adminBtn} onPress={openAdmin}>
+                <Ionicons name="shield-outline" size={18} color={colors.accent} />
+                <Text style={s.adminBtnTxt}>Панель администратора</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.ink3} />
+              </Pressable>
+            ) : null}
 
             {extrasLoading ? (
               <ActivityIndicator style={{ marginVertical: 16 }} color={colors.accent} />
@@ -444,7 +443,7 @@ export default function ProfileScreen() {
                         <Text style={s.sessionTitle} numberOfLines={1}>
                           {String(sess.directionKey || sess.targetRole || 'Сессия')}
                         </Text>
-                        <Text style={s.sessionMeta}>{CAREER_STATUS_RU[status] || status}</Text>
+                        <Text style={s.sessionMeta}>{formatCareerStatus(status)}</Text>
                       </View>
                       <Ionicons name="chevron-forward" size={16} color={colors.ink3} />
                     </Pressable>
@@ -472,7 +471,7 @@ export default function ProfileScreen() {
                         <Text style={s.sessionTitle} numberOfLines={1}>
                           {String(sess.domainKey || 'Навык')}
                         </Text>
-                        <Text style={s.sessionMeta}>{SKILL_STATUS_RU[status] || status}</Text>
+                        <Text style={s.sessionMeta}>{formatSkillStatus(status)}</Text>
                       </View>
                       <Ionicons name="chevron-forward" size={16} color={colors.ink3} />
                     </Pressable>
@@ -529,7 +528,7 @@ export default function ProfileScreen() {
             <Pressable onPress={() => setEditOpen(false)} hitSlop={12}>
               <Text style={s.modalCancel}>Отмена</Text>
             </Pressable>
-            <Text style={s.modalTitle}>Редактирование</Text>
+            <Text style={s.modalTitle}>Редактирование профиля</Text>
             <Pressable onPress={saveProfile} disabled={saving} hitSlop={12}>
               {saving ? (
                 <ActivityIndicator color={colors.accent} />
@@ -539,19 +538,27 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={s.modalBody} keyboardShouldPersistTaps="handled">
-            <Text style={s.fieldLbl}>Имя</Text>
-            <TextInput
-              style={s.fieldIn}
-              value={editForm.name}
-              onChangeText={(t) => setEditForm((f) => ({ ...f, name: t }))}
-              placeholderTextColor={colors.ink3}
-            />
-            <Text style={s.fieldLbl}>Имя пользователя</Text>
+            <Text style={s.fieldLbl}>Username</Text>
             <TextInput
               style={s.fieldIn}
               value={editForm.username}
               autoCapitalize="none"
               onChangeText={(t) => setEditForm((f) => ({ ...f, username: t }))}
+              placeholder="@username"
+              placeholderTextColor={colors.ink3}
+            />
+            <Text style={s.fieldLbl}>Имя</Text>
+            <TextInput
+              style={s.fieldIn}
+              value={editForm.firstName}
+              onChangeText={(t) => setEditForm((f) => ({ ...f, firstName: t }))}
+              placeholderTextColor={colors.ink3}
+            />
+            <Text style={s.fieldLbl}>Фамилия</Text>
+            <TextInput
+              style={s.fieldIn}
+              value={editForm.lastName}
+              onChangeText={(t) => setEditForm((f) => ({ ...f, lastName: t }))}
               placeholderTextColor={colors.ink3}
             />
             <Text style={s.fieldLbl}>О себе</Text>
@@ -560,44 +567,16 @@ export default function ProfileScreen() {
               value={editForm.aboutMe}
               onChangeText={(t) => setEditForm((f) => ({ ...f, aboutMe: t }))}
               multiline
+              placeholder="Кратко о себе и целях"
               placeholderTextColor={colors.ink3}
             />
-            <Text style={s.fieldLbl}>Локация</Text>
+            <Text style={s.fieldLbl}>Ссылка на GitHub</Text>
             <TextInput
               style={s.fieldIn}
-              value={editForm.location}
-              onChangeText={(t) => setEditForm((f) => ({ ...f, location: t }))}
-              placeholderTextColor={colors.ink3}
-            />
-            <Text style={s.fieldLbl}>Стек (через запятую)</Text>
-            <TextInput
-              style={s.fieldIn}
-              value={editForm.techStackText}
-              onChangeText={(t) => setEditForm((f) => ({ ...f, techStackText: t }))}
-              placeholderTextColor={colors.ink3}
-            />
-            <Text style={s.fieldLbl}>Дополнительно</Text>
-            <TextInput
-              style={[s.fieldIn, s.fieldArea]}
-              value={editForm.additionalInfo}
-              onChangeText={(t) => setEditForm((f) => ({ ...f, additionalInfo: t }))}
-              multiline
-              placeholderTextColor={colors.ink3}
-            />
-            <Text style={s.fieldLbl}>Телефон</Text>
-            <TextInput
-              style={s.fieldIn}
-              value={editForm.phone}
-              keyboardType="phone-pad"
-              onChangeText={(t) => setEditForm((f) => ({ ...f, phone: t }))}
-              placeholderTextColor={colors.ink3}
-            />
-            <Text style={s.fieldLbl}>Telegram</Text>
-            <TextInput
-              style={s.fieldIn}
-              value={editForm.telegram}
+              value={editForm.github}
               autoCapitalize="none"
-              onChangeText={(t) => setEditForm((f) => ({ ...f, telegram: t }))}
+              onChangeText={(t) => setEditForm((f) => ({ ...f, github: t }))}
+              placeholder="https://github.com/username"
               placeholderTextColor={colors.ink3}
             />
             {saveError ? <Text style={s.saveErr}>{saveError}</Text> : null}
@@ -675,15 +654,30 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
       letterSpacing: 0.6,
     },
     joined: { fontSize: 12, color: colors.ink3, marginTop: 8 },
-    editFab: {
-      width: 44,
-      height: 44,
+    editProfileBtn: {
+      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+      marginBottom: 12,
       borderWidth: 1,
       borderColor: colors.line,
       backgroundColor: colors.surface2,
     },
+    editProfileBtnTxt: { fontSize: 15, fontWeight: '600', color: colors.ink },
+    adminBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 14,
+      paddingHorizontal: 14,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: colors.accentMuted,
+      backgroundColor: colors.accentMuted,
+    },
+    adminBtnTxt: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.accent },
     section: {
       marginBottom: 22,
       paddingBottom: 16,

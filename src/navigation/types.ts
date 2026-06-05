@@ -2,6 +2,7 @@ export type RootStackParamList = {
   Main: undefined;
   Login: undefined;
   Register: undefined;
+  AdminDashboard: undefined;
 };
 
 export type VacanciesStackParamList = {
@@ -20,6 +21,11 @@ export type CommunityStackParamList = {
 export type LearnStackParamList = {
   LearnHub: undefined;
   CareerDirections: undefined;
+  CareerSessionSetup: {
+    directionKey: string;
+    directionLabel: string;
+    defaultTargetRole?: string;
+  };
   CareerSessions: undefined;
   CareerSessionDetail: { sessionId: string };
   SkillDomains: undefined;

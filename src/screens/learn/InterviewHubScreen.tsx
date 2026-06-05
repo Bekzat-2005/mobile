@@ -26,16 +26,12 @@ import {
   type InterviewDomain,
 } from '../../api/interview';
 import { skillTargetLevels } from '../../constants/career-defaults';
+import { SessionListCard } from '../../components/learn/SessionListCard';
+import { formatInterviewStatus, formatSkillLevel } from '../../lib/status-labels';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
 
 type Props = NativeStackScreenProps<LearnStackParamList, 'InterviewHub'>;
-
-const STATUS_RU: Record<string, string> = {
-  ready: 'Готова',
-  in_progress: 'В работе',
-  completed: 'Завершена',
-};
 
 function sid(row: Record<string, unknown>) {
   return String(row.id ?? row._id ?? '');
@@ -123,11 +119,7 @@ export default function InterviewHubScreen({ navigation }: Props) {
         contentContainerStyle={s.list}
         ListHeaderComponent={
           <>
-            <LearnPageHero
-              eyebrow="Интервью"
-              title="Режим интервью"
-              lead="Выберите область и уровень — получите серию вопросов с обратной связью после ответов. Подходит для подготовки к собеседованию по выбранному стеку."
-            />
+            <LearnPageHero eyebrow="Интервью" title="Режим интервью" lead="Голосовые ответы и AI-обратная связь по стеку." />
             <Pressable style={s.newBtn} onPress={openNewSession}>
               <Ionicons name="add-circle-outline" size={22} color={colors.accent} />
               <Text style={s.newTxt}>Новая сессия интервью</Text>
@@ -136,19 +128,18 @@ export default function InterviewHubScreen({ navigation }: Props) {
           </>
         }
         renderItem={({ item }) => {
-          const st = String(item.status || '');
-          const stRu = STATUS_RU[st] || st;
+          const interview = item.interview as Record<string, unknown> | undefined;
+          const questions = Array.isArray(interview?.questions) ? interview!.questions.length : 0;
+          const answers = Array.isArray(interview?.answers) ? interview!.answers.length : 0;
+          const pct = questions > 0 ? Math.round((answers / questions) * 100) : null;
           return (
-            <Pressable
-              style={({ pressed }) => [learnListCardStyle(colors), pressed && { opacity: 0.92 }]}
+            <SessionListCard
+              title={String(item.domainLabel || item.domainKey)}
+              subtitle={formatSkillLevel(String(item.targetLevel || ''))}
+              statusLabel={formatInterviewStatus(String(item.status || ''))}
+              progressPct={pct}
               onPress={() => navigation.navigate('InterviewSessionDetail', { sessionId: sid(item) })}
-            >
-              <Text style={s.cardTitle}>{String(item.domainLabel || item.domainKey)}</Text>
-              <Text style={s.cardMeta}>Уровень: {String(item.targetLevel || '—')}</Text>
-              <View style={s.statusPill}>
-                <Text style={s.statusTxt}>{stRu}</Text>
-              </View>
-            </Pressable>
+            />
           );
         }}
         ListEmptyComponent={<Text style={s.empty}>Пока нет сессий — создайте первую.</Text>}

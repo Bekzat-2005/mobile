@@ -11,6 +11,7 @@ import CommunityScreen from '../screens/main/CommunityScreen';
 import HomeScreen from '../screens/main/HomeScreen';
 import DailyTasksScreen from '../screens/main/DailyTasksScreen';
 import LeaderboardScreen from '../screens/main/LeaderboardScreen';
+import AdminDashboardScreen from '../screens/main/AdminDashboardScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import { FloatingAssistant } from '../components/FloatingAssistant';
 import VacanciesScreen from '../screens/main/VacanciesScreen';
@@ -18,6 +19,7 @@ import VacancyAssessmentScreen from '../screens/main/VacancyAssessmentScreen';
 import VacancyDetailScreen from '../screens/main/VacancyDetailScreen';
 import VacancyInterviewPrepScreen from '../screens/main/VacancyInterviewPrepScreen';
 import CareerDirectionsScreen from '../screens/learn/CareerDirectionsScreen';
+import CareerSessionSetupScreen from '../screens/learn/CareerSessionSetupScreen';
 import CareerSessionDetailScreen from '../screens/learn/CareerSessionDetailScreen';
 import CareerSessionsScreen from '../screens/learn/CareerSessionsScreen';
 import InterviewHubScreen from '../screens/learn/InterviewHubScreen';
@@ -96,6 +98,7 @@ function LearnStackNav() {
     <LearnStack.Navigator screenOptions={o} initialRouteName="LearnHub">
       <LearnStack.Screen name="LearnHub" component={LearnHubScreen} options={{ title: 'Развитие' }} />
       <LearnStack.Screen name="CareerDirections" component={CareerDirectionsScreen} options={{ title: 'План развития' }} />
+      <LearnStack.Screen name="CareerSessionSetup" component={CareerSessionSetupScreen} options={{ title: 'Создание плана' }} />
       <LearnStack.Screen name="CareerSessions" component={CareerSessionsScreen} options={{ title: 'Мои планы' }} />
       <LearnStack.Screen name="CareerSessionDetail" component={CareerSessionDetailScreen} options={{ title: 'Сессия' }} />
       <LearnStack.Screen name="SkillDomains" component={SkillDomainsScreen} options={{ title: 'Оценка навыков' }} />
@@ -167,6 +170,7 @@ export default function AppNavigator() {
         <RootStack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
         <RootStack.Screen name="Login" component={LoginScreen} options={{ title: 'Вход' }} />
         <RootStack.Screen name="Register" component={RegisterScreen} options={{ title: 'Регистрация' }} />
+        <RootStack.Screen name="AdminDashboard" component={AdminDashboardScreen} options={{ title: 'Админ-панель' }} />
       </RootStack.Navigator>
     </NavigationContainer>
   );

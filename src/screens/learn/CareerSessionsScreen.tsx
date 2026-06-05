@@ -1,10 +1,12 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { LearnStackParamList } from '../../navigation/types';
+import { SessionListCard } from '../../components/learn/SessionListCard';
 import { fetchCareerSessions } from '../../api/career';
+import { formatCareerStatus, formatOnboardingMode } from '../../lib/status-labels';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
 
@@ -12,6 +14,25 @@ type Props = NativeStackScreenProps<LearnStackParamList, 'CareerSessions'>;
 
 function sid(row: Record<string, unknown>) {
   return String(row.id ?? row._id ?? '');
+}
+
+function topicProgressPct(item: Record<string, unknown>): number | null {
+  const result = item.result as Record<string, unknown> | undefined;
+  const phases = Array.isArray(result?.phases) ? (result!.phases as Record<string, unknown>[]) : [];
+  let total = 0;
+  let done = 0;
+  for (const ph of phases) {
+    const modules = Array.isArray(ph.modules) ? (ph.modules as Record<string, unknown>[]) : [];
+    for (const mod of modules) {
+      const topics = Array.isArray(mod.topics) ? (mod.topics as Record<string, unknown>[]) : [];
+      for (const t of topics) {
+        total++;
+        if (String(t.progressionStatus) === 'completed') done++;
+      }
+    }
+  }
+  if (total === 0) return null;
+  return Math.round((done / total) * 100);
 }
 
 export default function CareerSessionsScreen({ navigation }: Props) {
@@ -57,16 +78,20 @@ export default function CareerSessionsScreen({ navigation }: Props) {
         keyExtractor={(r) => sid(r)}
         refreshControl={<RefreshControl refreshing={ref} onRefresh={() => { setRef(true); load(); }} />}
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-        renderItem={({ item }) => (
-          <Pressable
-            style={s.card}
-            onPress={() => navigation.navigate('CareerSessionDetail', { sessionId: sid(item) })}
-          >
-            <Text style={s.title}>{String(item.directionLabel || item.directionKey || 'Направление')}</Text>
-            <Text style={s.meta}>{String(item.targetRole || '')}</Text>
-            <Text style={s.status}>{String(item.status || '')}</Text>
-          </Pressable>
-        )}
+        renderItem={({ item }) => {
+          const pct = topicProgressPct(item);
+          const mode = formatOnboardingMode(String(item.onboardingMode || ''));
+          return (
+            <SessionListCard
+              title={String(item.directionLabel || item.directionKey || 'Направление')}
+              subtitle={String(item.targetRole || '')}
+              statusLabel={formatCareerStatus(String(item.status || ''))}
+              progressPct={pct}
+              badges={mode !== '—' ? [{ label: mode }] : []}
+              onPress={() => navigation.navigate('CareerSessionDetail', { sessionId: sid(item) })}
+            />
+          );
+        }}
         ListEmptyComponent={<Text style={s.muted}>Пока нет сессий — создайте в «Направлениях».</Text>}
       />
     </SafeAreaView>
@@ -76,16 +101,6 @@ export default function CareerSessionsScreen({ navigation }: Props) {
 function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.surface },
-    card: {
-      borderWidth: 1,
-      borderColor: colors.line,
-      padding: 14,
-      marginBottom: 10,
-      backgroundColor: colors.surface2,
-    },
-    title: { fontSize: 16, fontWeight: '600', color: colors.ink },
-    meta: { fontSize: 14, color: colors.ink2, marginTop: 4 },
-    status: { fontSize: 12, color: colors.accent, marginTop: 8 },
     muted: { textAlign: 'center', color: colors.ink3, marginTop: 32, paddingHorizontal: 24 },
   });
 }

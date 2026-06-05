@@ -101,7 +101,7 @@ export default function SkillDomainsScreen({ navigation }: Props) {
           <LearnPageHero
             eyebrow="Оценка"
             title="Оценка навыков"
-            lead="Выберите область (Frontend, Backend, QA и др.), укажите целевой уровень — ИИ соберёт персональный тест из 8–10 вопросов и даст разбор сильных и слабых зон."
+            lead="Выберите область и уровень — ИИ соберёт тест."
             linkLabel="Мои оценки"
             onLinkPress={() => navigation.navigate('SkillSessions')}
           />
@@ -113,11 +113,6 @@ export default function SkillDomainsScreen({ navigation }: Props) {
           >
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={s.rowTitle}>{item.label || item.key}</Text>
-              {item.description ? (
-                <Text style={s.rowDesc} numberOfLines={3}>
-                  {String(item.description)}
-                </Text>
-              ) : null}
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.ink4} />
           </Pressable>

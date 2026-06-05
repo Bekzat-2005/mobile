@@ -24,6 +24,7 @@ import {
   type InterviewQuestion,
   type InterviewSession,
 } from '../../api/interview';
+import { formatInterviewStatus, formatSkillLevel } from '../../lib/status-labels';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
 import {
@@ -36,15 +37,6 @@ import {
 type Props = NativeStackScreenProps<LearnStackParamList, 'InterviewSessionDetail'>;
 
 type RecordingStatus = 'idle' | 'recording' | 'processing' | 'finished';
-
-const LEVEL_RU: Record<string, string> = {
-  trainee: 'Стажёр',
-  junior: 'Начинающий',
-  junior_plus: 'Начинающий+',
-  hard_junior: 'Уверенный начинающий',
-  middle: 'Средний',
-  senior: 'Старший',
-};
 
 function formatDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
@@ -249,7 +241,7 @@ export default function InterviewSessionDetailScreen({ route, navigation }: Prop
   }
 
   const intro = session.interview?.introduction || '';
-  const levelRu = LEVEL_RU[String(session.targetLevel)] || String(session.targetLevel);
+  const levelRu = formatSkillLevel(String(session.targetLevel));
 
   if (isCompleted) {
     const summary = session.summary;
@@ -293,8 +285,9 @@ export default function InterviewSessionDetailScreen({ route, navigation }: Prop
 
         {!isStarted ? (
           <>
-            {intro ? <Text style={s.body}>{intro}</Text> : null}
-            <Text style={s.hint}>Вопросов: {questions.length} · Голос + AI</Text>
+            <Text style={s.hint}>
+              {questions.length} вопросов · {formatInterviewStatus(status)}
+            </Text>
             <Pressable style={[s.btn, starting && s.btnDisabled]} disabled={starting} onPress={start}>
               <Text style={s.btnTxt}>{starting ? 'Запуск…' : 'Начать интервью'}</Text>
             </Pressable>

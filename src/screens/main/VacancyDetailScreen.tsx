@@ -19,6 +19,7 @@ import {
   type Vacancy,
   type VacancyApplication,
 } from '../../api/vacancies';
+import { formatVacancyApplicationStatus } from '../../lib/status-labels';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
 
@@ -36,13 +37,6 @@ const FORMAT_RU: Record<string, string> = {
   remote: 'Удалённо',
   onsite: 'Офис',
   hybrid: 'Гибрид',
-};
-
-const STATUS_RU: Record<string, string> = {
-  in_progress: 'В процессе',
-  completed: 'Завершено',
-  invited: 'Приглашён',
-  rejected: 'Отклонён',
 };
 
 function levelLabel(key?: string) {
@@ -203,7 +197,7 @@ export default function VacancyDetailScreen({ route, navigation }: Props) {
           {appStatus ? (
             <View style={s.statusRow}>
               <Text style={s.statusLabel}>Статус отклика:</Text>
-              <Text style={s.statusValue}>{STATUS_RU[appStatus] || appStatus}</Text>
+              <Text style={s.statusValue}>{formatVacancyApplicationStatus(appStatus)}</Text>
               {typeof application?.score === 'number' ? (
                 <Text style={s.statusScore}>{application.score}/100</Text>
               ) : null}
