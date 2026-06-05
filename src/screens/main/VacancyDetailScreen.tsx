@@ -2,7 +2,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,8 +12,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import type { VacanciesStackParamList } from '../../navigation/types';
-import { fetchVacancy } from '../../api/vacancies';
-import type { Vacancy } from '../../api/vacancies';
+import {
+  applyToVacancy,
+  fetchVacancy,
+  getMyVacancyApplication,
+  type Vacancy,
+  type VacancyApplication,
+} from '../../api/vacancies';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
 
@@ -32,6 +36,13 @@ const FORMAT_RU: Record<string, string> = {
   remote: 'Удалённо',
   onsite: 'Офис',
   hybrid: 'Гибрид',
+};
+
+const STATUS_RU: Record<string, string> = {
+  in_progress: 'В процессе',
+  completed: 'Завершено',
+  invited: 'Приглашён',
+  rejected: 'Отклонён',
 };
 
 function levelLabel(key?: string) {
@@ -62,12 +73,18 @@ function requirementsOf(v: Vacancy): string[] {
   return Array.isArray(v.requirements) ? v.requirements.map(String).filter(Boolean) : [];
 }
 
-export default function VacancyDetailScreen({ route }: Props) {
+function isDoneStatus(status?: string) {
+  return status === 'completed' || status === 'invited' || status === 'rejected';
+}
+
+export default function VacancyDetailScreen({ route, navigation }: Props) {
   const { id } = route.params;
   const { colors } = useAppTheme();
   const { token } = useAuth();
   const [vacancy, setVacancy] = useState<Vacancy | null>(null);
+  const [application, setApplication] = useState<VacancyApplication | null>(null);
   const [loading, setLoading] = useState(true);
+  const [applying, setApplying] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -75,6 +92,16 @@ export default function VacancyDetailScreen({ route }: Props) {
       try {
         const { vacancy: v } = await fetchVacancy(id, token);
         setVacancy(v);
+        if (token) {
+          try {
+            const data = await getMyVacancyApplication(id, token);
+            setApplication(data.application);
+          } catch (e) {
+            if ((e as Error & { status?: number }).status !== 404) {
+              console.warn(e);
+            }
+          }
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Ошибка');
       } finally {
@@ -83,14 +110,29 @@ export default function VacancyDetailScreen({ route }: Props) {
     })();
   }, [id, token]);
 
-  function onContinueAssessment() {
-    console.log('Продолжить оценку', id);
-    Alert.alert('Продолжить оценку', 'Переход к оценке будет добавлен позже.');
+  async function onApplyOrContinue() {
+    if (!token) {
+      navigation.getParent()?.getParent()?.navigate('Login');
+      return;
+    }
+    if (application) {
+      navigation.navigate('VacancyAssessment', { id });
+      return;
+    }
+    setApplying(true);
+    try {
+      const data = await applyToVacancy(id, token);
+      setApplication(data.application);
+      navigation.navigate('VacancyAssessment', { id });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось откликнуться');
+    } finally {
+      setApplying(false);
+    }
   }
 
   function onInterviewPrep() {
-    console.log('Подготовка к интервью', id);
-    Alert.alert('Подготовка к интервью', 'Раздел Q&A будет добавлен позже.');
+    navigation.navigate('VacancyInterviewPrep', { id });
   }
 
   const s = styles(colors);
@@ -117,6 +159,17 @@ export default function VacancyDetailScreen({ route }: Props) {
   const salary = salaryText(vacancy);
   const location = typeof vacancy.location === 'string' ? vacancy.location : '';
   const applicants = typeof vacancy.applicantCount === 'number' ? vacancy.applicantCount : 0;
+  const appStatus = application?.status;
+  const hasApplication = Boolean(application);
+  const isDone = isDoneStatus(appStatus);
+
+  const primaryLabel = !token
+    ? 'Войти для отклика'
+    : isDone
+      ? 'Посмотреть результаты'
+      : hasApplication
+        ? 'Продолжить оценку'
+        : 'Откликнуться и пройти оценку';
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -146,6 +199,16 @@ export default function VacancyDetailScreen({ route }: Props) {
               {applicants} {applicants === 1 ? 'отклик' : applicants < 5 ? 'отклика' : 'откликов'}
             </Text>
           </View>
+
+          {appStatus ? (
+            <View style={s.statusRow}>
+              <Text style={s.statusLabel}>Статус отклика:</Text>
+              <Text style={s.statusValue}>{STATUS_RU[appStatus] || appStatus}</Text>
+              {typeof application?.score === 'number' ? (
+                <Text style={s.statusScore}>{application.score}/100</Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
 
         {desc ? (
@@ -184,8 +247,12 @@ export default function VacancyDetailScreen({ route }: Props) {
       </ScrollView>
 
       <SafeAreaView style={s.footer} edges={['bottom']}>
-        <Pressable style={s.btnPrimary} onPress={onContinueAssessment}>
-          <Text style={s.btnPrimaryText}>Продолжить оценку</Text>
+        <Pressable
+          style={[s.btnPrimary, applying && s.btnDisabled]}
+          onPress={onApplyOrContinue}
+          disabled={applying}
+        >
+          <Text style={s.btnPrimaryText}>{applying ? 'Загрузка…' : primaryLabel}</Text>
         </Pressable>
         <Pressable style={s.btnSecondary} onPress={onInterviewPrep}>
           <Text style={s.btnSecondaryText}>Подготовка к интервью</Text>
@@ -237,6 +304,10 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
     locRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     location: { fontSize: 13, color: colors.ink3 },
     applicants: { fontSize: 13, color: colors.ink3 },
+    statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 4 },
+    statusLabel: { fontSize: 13, color: colors.ink3 },
+    statusValue: { fontSize: 13, fontWeight: '700', color: colors.accent },
+    statusScore: { fontSize: 13, fontWeight: '700', color: colors.ink },
     section: { gap: 12 },
     sectionTitle: {
       fontSize: 10,
@@ -283,6 +354,7 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
       backgroundColor: colors.surface2,
     },
     btnSecondaryText: { color: colors.ink, fontWeight: '600', fontSize: 16 },
+    btnDisabled: { opacity: 0.6 },
     error: { color: colors.danger, padding: 20 },
   });
 }

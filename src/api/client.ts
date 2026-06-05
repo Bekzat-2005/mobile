@@ -58,9 +58,10 @@ export async function apiRequest<T = unknown>(
       typeof payload === 'object' && payload && 'message' in payload
         ? String((payload as { message: string }).message)
         : 'Запрос не выполнен';
-    const error = new Error(message);
+    const error = new Error(message) as Error & { status?: number; details?: unknown };
+    error.status = response.status;
     if (typeof payload === 'object' && payload && 'details' in payload) {
-      (error as Error & { details?: unknown }).details = (payload as { details: unknown }).details;
+      error.details = (payload as { details: unknown }).details;
     }
     throw error;
   }

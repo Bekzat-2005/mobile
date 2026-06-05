@@ -7,6 +7,8 @@ export type RootStackParamList = {
 export type VacanciesStackParamList = {
   VacanciesList: undefined;
   VacancyDetail: { id: string };
+  VacancyInterviewPrep: { id: string };
+  VacancyAssessment: { id: string };
 };
 
 export type CommunityStackParamList = {

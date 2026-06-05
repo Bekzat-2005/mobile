@@ -15,12 +15,14 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
+        "NSMicrophoneUsageDescription": "Skillo использует микрофон для голосовых ответов в режиме интервью.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }
       }
     },
     "android": {
+      "permissions": ["RECORD_AUDIO"],
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

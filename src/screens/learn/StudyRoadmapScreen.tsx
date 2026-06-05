@@ -2,6 +2,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -13,6 +15,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { LearnStackParamList } from '../../navigation/types';
+import {
+  createNotebookNote,
+  fetchNotebook,
+  updateNotebookNote,
+  type NotebookNote,
+  type NotebookSourceContext,
+} from '../../api/notebook';
 import {
   generateStudyLesson,
   generateStudyRoadmap,
@@ -76,6 +85,44 @@ function isRoadmapPayload(r: unknown): r is StudyRoadmapPayload {
   return Boolean(r && typeof r === 'object' && Array.isArray((r as StudyRoadmapPayload).sections));
 }
 
+type WorkspaceTab = 'lesson' | 'notes';
+
+function buildNotebookSourceContext(
+  roadmap: StudyRoadmapPayload,
+  entry: TopicEntry,
+  directionInput: string,
+  lesson?: StudyLessonPayload,
+): NotebookSourceContext {
+  return {
+    sourceType: 'study_lesson',
+    directionLabel: roadmap.directionLabel || directionInput.trim(),
+    roadmapTitle: roadmap.roadmapTitle,
+    sectionTitle: entry.section.title,
+    topicTitle: entry.topic.title,
+    lessonTitle: lesson?.lessonTitle || '',
+    pagePath: '/study',
+  };
+}
+
+function findNoteForTopic(notes: NotebookNote[], context: NotebookSourceContext): NotebookNote | null {
+  const topicTitle = context.topicTitle?.trim();
+  const sectionTitle = context.sectionTitle?.trim();
+  const directionLabel = context.directionLabel?.trim();
+
+  if (!topicTitle) return null;
+
+  return (
+    notes.find((note) => {
+      const sc = note.sourceContext;
+      if (!sc || sc.sourceType !== 'study_lesson') return false;
+      if ((sc.topicTitle || '').trim() !== topicTitle) return false;
+      if (sectionTitle && (sc.sectionTitle || '').trim() !== sectionTitle) return false;
+      if (directionLabel && (sc.directionLabel || '').trim() !== directionLabel) return false;
+      return note.type === 'manual';
+    }) || null
+  );
+}
+
 export default function StudyRoadmapScreen(_props: Props) {
   const { colors } = useAppTheme();
   const { token, loading: authLoading } = useAuth();
@@ -93,6 +140,12 @@ export default function StudyRoadmapScreen(_props: Props) {
   const [expandedSectionIds, setExpandedSectionIds] = useState<Record<string, boolean>>({});
   const [storageHydrated, setStorageHydrated] = useState(false);
   const [restoredLabel, setRestoredLabel] = useState<string | null>(null);
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('lesson');
+  const [noteText, setNoteText] = useState('');
+  const [noteId, setNoteId] = useState<string | null>(null);
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteLoading, setNoteLoading] = useState(false);
+  const [noteSaving, setNoteSaving] = useState(false);
   const lessonsRef = useRef(lessons);
   lessonsRef.current = lessons;
 
@@ -236,6 +289,87 @@ export default function StudyRoadmapScreen(_props: Props) {
     };
   }, [token, roadmap, selectedTopicId, topicEntries]);
 
+  const loadNotebookNote = useCallback(async () => {
+    if (!token || !roadmap || !selectedEntry) return;
+
+    const context = buildNotebookSourceContext(roadmap, selectedEntry, direction, selectedLesson);
+    const defaultTitle = selectedEntry.topic.title
+      ? `${selectedEntry.topic.title}: заметка`
+      : 'Заметка';
+
+    setNoteLoading(true);
+    try {
+      const response = await fetchNotebook(token, { search: selectedEntry.topic.title, type: 'manual' });
+      const existing = findNoteForTopic(response.notes || [], context);
+
+      if (existing) {
+        setNoteId(existing.id);
+        setNoteTitle(existing.title || defaultTitle);
+        setNoteText(existing.manualNote || '');
+      } else {
+        setNoteId(null);
+        setNoteTitle(defaultTitle);
+        setNoteText('');
+      }
+    } catch (e) {
+      setNoteId(null);
+      setNoteTitle(defaultTitle);
+      setNoteText('');
+      Alert.alert('Ошибка', e instanceof Error ? e.message : 'Не удалось загрузить заметку');
+    } finally {
+      setNoteLoading(false);
+    }
+  }, [token, roadmap, selectedEntry, direction, selectedLesson]);
+
+  useEffect(() => {
+    if (workspaceTab !== 'notes' || !selectedEntry) return;
+    void loadNotebookNote();
+  }, [workspaceTab, selectedEntry, selectedTopicId, loadNotebookNote]);
+
+  async function saveNotebookNote() {
+    if (!token || !roadmap || !selectedEntry) return;
+
+    const trimmed = noteText.trim();
+    if (!trimmed) {
+      Alert.alert('Пустая заметка', 'Напишите текст перед сохранением.');
+      return;
+    }
+
+    const context = buildNotebookSourceContext(roadmap, selectedEntry, direction, selectedLesson);
+    const title = (noteTitle || `${selectedEntry.topic.title}: заметка`).trim();
+
+    setNoteSaving(true);
+    try {
+      const payload = {
+        title,
+        manualNote: trimmed,
+        tags: [
+          selectedEntry.topic.title,
+          ...(selectedEntry.topic.keyIdeas || []),
+        ].filter(Boolean),
+        sourceContext: context,
+      };
+
+      if (noteId) {
+        const { note } = await updateNotebookNote(token, noteId, payload);
+        setNoteId(note.id);
+        setNoteTitle(note.title);
+        setNoteText(note.manualNote);
+      } else {
+        const { note } = await createNotebookNote(token, payload);
+        setNoteId(note.id);
+        setNoteTitle(note.title);
+        setNoteText(note.manualNote);
+      }
+
+      Alert.alert('Готово', 'Заметка сохранена в блокнот.');
+    } catch (e) {
+      Alert.alert('Ошибка', e instanceof Error ? e.message : 'Не удалось сохранить заметку');
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
   async function run() {
     if (!token) return;
     setErr('');
@@ -304,6 +438,11 @@ export default function StudyRoadmapScreen(_props: Props) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
+      <KeyboardAvoidingView
+        style={s.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
       <ScrollView
         contentContainerStyle={s.scroll}
         keyboardShouldPersistTaps="handled"
@@ -484,7 +623,7 @@ export default function StudyRoadmapScreen(_props: Props) {
             {selectedEntry ? (
               <View style={s.lessonCard}>
                 <View style={s.lessonHead}>
-                  <Text style={s.cardEyebrow}>Урок</Text>
+                  <Text style={s.cardEyebrow}>Рабочая зона</Text>
                   <Text style={s.lessonBreadcrumb} numberOfLines={2}>
                     {roadmap.directionLabel || direction} · {selectedEntry.section.title}
                   </Text>
@@ -494,23 +633,81 @@ export default function StudyRoadmapScreen(_props: Props) {
                   </Text>
                 </View>
 
-                {selectedEntry.topic.whyItMatters ? (
+                <View style={s.workspaceTabs}>
+                  <Pressable
+                    style={[s.workspaceTab, workspaceTab === 'lesson' && s.workspaceTabOn]}
+                    onPress={() => setWorkspaceTab('lesson')}
+                  >
+                    <Text style={[s.workspaceTabTxt, workspaceTab === 'lesson' && s.workspaceTabTxtOn]}>
+                      Урок
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[s.workspaceTab, workspaceTab === 'notes' && s.workspaceTabOn]}
+                    onPress={() => setWorkspaceTab('notes')}
+                  >
+                    <Text style={[s.workspaceTabTxt, workspaceTab === 'notes' && s.workspaceTabTxtOn]}>
+                      Блокнот
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {workspaceTab === 'notes' ? (
+                  <View style={s.notesPanel}>
+                    <Text style={s.notesHint}>
+                      Конспект по теме «{selectedEntry.topic.title}». Синхронизируется с блокнотом на сайте.
+                    </Text>
+
+                    {noteLoading ? (
+                      <View style={s.lessonState}>
+                        <ActivityIndicator color={colors.accent} />
+                        <Text style={s.lessonStateText}>Загружаем заметку…</Text>
+                      </View>
+                    ) : (
+                      <>
+                        <TextInput
+                          style={s.notesInput}
+                          value={noteText}
+                          onChangeText={setNoteText}
+                          placeholder="Напишите свои заметки здесь..."
+                          placeholderTextColor={colors.ink3}
+                          multiline
+                          textAlignVertical="top"
+                          editable={!noteSaving}
+                        />
+                        <Pressable
+                          style={[s.saveNoteBtn, (noteSaving || !noteText.trim()) && s.saveNoteBtnOff]}
+                          disabled={noteSaving || !noteText.trim()}
+                          onPress={() => void saveNotebookNote()}
+                        >
+                          {noteSaving ? (
+                            <ActivityIndicator color={colors.surface} />
+                          ) : (
+                            <Text style={s.saveNoteBtnTxt}>Сохранить</Text>
+                          )}
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
+                ) : null}
+
+                {workspaceTab === 'lesson' && selectedEntry.topic.whyItMatters ? (
                   <View style={s.whyBox}>
                     <Text style={s.whyLabel}>Зачем это в работе</Text>
                     <Text style={s.whyText}>{selectedEntry.topic.whyItMatters}</Text>
                   </View>
                 ) : null}
 
-                {lessonLoadingId === selectedTopicId ? (
+                {workspaceTab === 'lesson' && lessonLoadingId === selectedTopicId ? (
                   <View style={s.lessonState}>
                     <ActivityIndicator color={colors.accent} />
                     <Text style={s.lessonStateText}>Готовим теорию и пример кода…</Text>
                   </View>
                 ) : null}
 
-                {lessonErr ? <Text style={s.err}>{lessonErr}</Text> : null}
+                {workspaceTab === 'lesson' && lessonErr ? <Text style={s.err}>{lessonErr}</Text> : null}
 
-                {selectedLesson ? (
+                {workspaceTab === 'lesson' && selectedLesson ? (
                   <>
                     <Text style={s.lessonH3}>{selectedLesson.lessonTitle || 'Теория'}</Text>
                     {selectedLesson.summary ? <Text style={s.lessonSummary}>{selectedLesson.summary}</Text> : null}
@@ -615,7 +812,7 @@ export default function StudyRoadmapScreen(_props: Props) {
                       })()}
                     </View>
                   </>
-                ) : !lessonLoadingId && !lessonErr ? (
+                ) : workspaceTab === 'lesson' && !lessonLoadingId && !lessonErr ? (
                   <Text style={s.mutedSm}>Выберите тему выше, чтобы загрузить урок.</Text>
                 ) : null}
               </View>
@@ -623,6 +820,7 @@ export default function StudyRoadmapScreen(_props: Props) {
           </>
         ) : null}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -631,6 +829,7 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
   const codeFont = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' });
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.surface },
+    flex: { flex: 1 },
     centered: { justifyContent: 'center', alignItems: 'center' },
     scroll: { padding: 16, paddingBottom: 48 },
     restoredBanner: {
@@ -804,6 +1003,44 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
       backgroundColor: colors.surface2,
     },
     lessonHead: { marginBottom: 12 },
+    workspaceTabs: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 16,
+    },
+    workspaceTab: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.line,
+      paddingVertical: 10,
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+    },
+    workspaceTabOn: {
+      borderColor: colors.accent,
+      backgroundColor: colors.accentMuted,
+    },
+    workspaceTabTxt: { fontSize: 14, fontWeight: '600', color: colors.ink2 },
+    workspaceTabTxtOn: { color: colors.ink, fontWeight: '700' },
+    notesPanel: { gap: 12 },
+    notesHint: { fontSize: 13, color: colors.ink2, lineHeight: 19 },
+    notesInput: {
+      minHeight: 220,
+      borderWidth: 1,
+      borderColor: colors.line,
+      backgroundColor: colors.surface,
+      padding: 14,
+      fontSize: 15,
+      lineHeight: 22,
+      color: colors.ink,
+    },
+    saveNoteBtn: {
+      backgroundColor: colors.accent,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    saveNoteBtnOff: { opacity: 0.5 },
+    saveNoteBtnTxt: { color: colors.surface, fontWeight: '700', fontSize: 16 },
     lessonBreadcrumb: { fontSize: 12, color: colors.ink3, marginBottom: 6 },
     lessonTopicTitle: { fontSize: 20, fontWeight: '700', color: colors.ink },
     stepPill: {

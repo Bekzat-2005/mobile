@@ -1,20 +1,42 @@
 import { apiRequest } from './client';
 
+export type AnalyticsWeakArea = {
+  topic?: string;
+  explanation?: string;
+  suggestedFocus?: string;
+};
+
+export type AnalyticsStudyPlanStep = {
+  step?: string;
+  rationale?: string;
+};
+
 export type AnalyticsMetrics = {
   totalQuestionsAnswered?: number;
+  correctAnswers?: number;
   accuracyRate?: number;
+  avgTimePerQuestion?: number;
+  avgTimePerTheory?: number;
   retryRate?: number;
   dropoffRate?: number;
   activityFrequency?: string;
-  topicStats?: { domain?: string; total?: number; correct?: number; accuracy?: number }[];
+  totalSessions?: number;
+  recentSessionDays?: number;
+  topicStats?: { topic?: string; total?: number; correct?: number; accuracy?: number }[];
+  weakestTopics?: string[];
+  strongestTopics?: string[];
+  mostLikedTopics?: string[];
+  completedDomains?: string[];
   lastAnalysis?: {
     generatedAt?: string;
+    model?: string;
     overallInsight?: string;
-    weakAreas?: string[];
+    weakAreas?: (string | AnalyticsWeakArea)[];
     strengths?: string[];
+    behavioralPatterns?: string[];
     recommendations?: string[];
     nextTopics?: string[];
-    studyPlan?: string[];
+    studyPlan?: (string | AnalyticsStudyPlanStep)[];
   };
   [key: string]: unknown;
 };

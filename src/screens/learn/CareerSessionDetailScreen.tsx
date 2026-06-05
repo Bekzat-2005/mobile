@@ -13,6 +13,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   UIManager,
   View,
 } from 'react-native';
@@ -25,6 +26,13 @@ import {
   generateCareerTopicContent,
   retryCareerRoadmapGeneration,
 } from '../../api/career';
+import {
+  createNotebookNote,
+  fetchNotebook,
+  updateNotebookNote,
+  type NotebookNote,
+  type NotebookSourceContext,
+} from '../../api/notebook';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
 
@@ -88,17 +96,69 @@ function countTopicProgress(phases: unknown): { total: number; completed: number
   return { total, completed };
 }
 
-function findTopicById(sess: Record<string, unknown> | null, topicId: string): Record<string, unknown> | null {
+type TopicEntry = {
+  phase: Record<string, unknown>;
+  module: Record<string, unknown>;
+  topic: Record<string, unknown>;
+};
+
+type TopicSheetTab = 'materials' | 'notebook';
+
+function findTopicEntry(sess: Record<string, unknown> | null, topicId: string): TopicEntry | null {
   if (!sess) return null;
   const result = asRecord(sess.result);
-  for (const ph of asArray<Record<string, unknown>>(result.phases)) {
-    for (const mod of asArray<Record<string, unknown>>(ph.modules)) {
+  for (const phase of asArray<Record<string, unknown>>(result.phases)) {
+    for (const mod of asArray<Record<string, unknown>>(phase.modules)) {
       for (const topic of asArray<Record<string, unknown>>(mod.topics)) {
-        if (String(topic.id) === topicId) return topic;
+        if (String(topic.id) === topicId) {
+          return { phase, module: mod, topic };
+        }
       }
     }
   }
   return null;
+}
+
+function findTopicById(sess: Record<string, unknown> | null, topicId: string): Record<string, unknown> | null {
+  return findTopicEntry(sess, topicId)?.topic || null;
+}
+
+function buildCareerNotebookContext(
+  session: Record<string, unknown>,
+  entry: TopicEntry,
+  sessionId: string,
+): NotebookSourceContext {
+  const result = asRecord(session.result);
+  return {
+    sourceType: 'career_roadmap',
+    directionLabel: String(session.directionLabel || ''),
+    roadmapTitle: String(result.roadmapTitle || ''),
+    sectionTitle: String(entry.module.title || ''),
+    topicTitle: String(entry.topic.title || ''),
+    lessonTitle: String(entry.topic.title || ''),
+    pagePath: `/career/sessions/${sessionId}`,
+  };
+}
+
+function findNotebookNoteForCareer(
+  notes: NotebookNote[],
+  context: NotebookSourceContext,
+): NotebookNote | null {
+  const topicTitle = context.topicTitle?.trim();
+  const sectionTitle = context.sectionTitle?.trim();
+  const directionLabel = context.directionLabel?.trim();
+  if (!topicTitle) return null;
+
+  return (
+    notes.find((note) => {
+      const sc = note.sourceContext;
+      if (!sc || sc.sourceType !== 'career_roadmap') return false;
+      if ((sc.topicTitle || '').trim() !== topicTitle) return false;
+      if (sectionTitle && (sc.sectionTitle || '').trim() !== sectionTitle) return false;
+      if (directionLabel && (sc.directionLabel || '').trim() !== directionLabel) return false;
+      return note.type === 'manual';
+    }) || null
+  );
 }
 
 export default function CareerSessionDetailScreen({ route, navigation }: Props) {
@@ -123,6 +183,12 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
     maxScore: number;
     percentage: number;
   } | null>(null);
+  const [topicSheetTab, setTopicSheetTab] = useState<TopicSheetTab>('materials');
+  const [noteText, setNoteText] = useState('');
+  const [noteId, setNoteId] = useState<string | null>(null);
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteLoading, setNoteLoading] = useState(false);
+  const [noteSaving, setNoteSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -149,10 +215,99 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
     return () => clearInterval(id);
   }, [topicSheetId, token, session, load]);
 
+  const loadNotebookNote = useCallback(async () => {
+    if (!token || !session || !topicSheetId) return;
+    const entry = findTopicEntry(session, topicSheetId);
+    if (!entry) return;
+
+    const context = buildCareerNotebookContext(session, entry, sessionId);
+    const defaultTitle = String(entry.topic.title || 'Тема')
+      ? `${String(entry.topic.title)}: заметка`
+      : 'Заметка';
+
+    setNoteLoading(true);
+    try {
+      const response = await fetchNotebook(token, {
+        search: String(entry.topic.title || ''),
+        type: 'manual',
+      });
+      const existing = findNotebookNoteForCareer(response.notes || [], context);
+
+      if (existing) {
+        setNoteId(existing.id);
+        setNoteTitle(existing.title || defaultTitle);
+        setNoteText(existing.manualNote || '');
+      } else {
+        setNoteId(null);
+        setNoteTitle(defaultTitle);
+        setNoteText('');
+      }
+    } catch (e) {
+      setNoteId(null);
+      setNoteTitle(defaultTitle);
+      setNoteText('');
+      Alert.alert('Ошибка', e instanceof Error ? e.message : 'Не удалось загрузить заметку');
+    } finally {
+      setNoteLoading(false);
+    }
+  }, [token, session, topicSheetId, sessionId]);
+
+  useEffect(() => {
+    if (topicSheetTab !== 'notebook' || !topicSheetId) return;
+    void loadNotebookNote();
+  }, [topicSheetTab, topicSheetId, loadNotebookNote]);
+
+  async function saveNotebookNote() {
+    if (!token || !session || !topicSheetId) return;
+    const entry = findTopicEntry(session, topicSheetId);
+    if (!entry) return;
+
+    const trimmed = noteText.trim();
+    if (!trimmed) {
+      Alert.alert('Пустая заметка', 'Напишите текст перед сохранением.');
+      return;
+    }
+
+    const context = buildCareerNotebookContext(session, entry, sessionId);
+    const title = (noteTitle || `${String(entry.topic.title)}: заметка`).trim();
+
+    setNoteSaving(true);
+    try {
+      const payload = {
+        title,
+        manualNote: trimmed,
+        tags: [String(entry.topic.title || '')].filter(Boolean),
+        sourceContext: context,
+      };
+
+      if (noteId) {
+        const { note } = await updateNotebookNote(token, noteId, payload);
+        setNoteId(note.id);
+        setNoteTitle(note.title);
+        setNoteText(note.manualNote);
+      } else {
+        const { note } = await createNotebookNote(token, payload);
+        setNoteId(note.id);
+        setNoteTitle(note.title);
+        setNoteText(note.manualNote);
+      }
+
+      Alert.alert('Готово', 'Заметка сохранена в блокнот.');
+    } catch (e) {
+      Alert.alert('Ошибка', e instanceof Error ? e.message : 'Не удалось сохранить заметку');
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
   function openTopicSheet(topicId: string) {
     setTopicSheetError('');
     setLastEvaluation(null);
     setQuizSelections({});
+    setTopicSheetTab('materials');
+    setNoteText('');
+    setNoteId(null);
+    setNoteTitle('');
     setTopicSheetId(topicId);
   }
 
@@ -161,6 +316,10 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
     setTopicSheetError('');
     setLastEvaluation(null);
     setQuizSelections({});
+    setTopicSheetTab('materials');
+    setNoteText('');
+    setNoteId(null);
+    setNoteTitle('');
   }
 
   async function handleGenerateTopic() {
@@ -650,6 +809,66 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
               <Text style={s.body}>Сначала завершите предыдущие темы — эта пока заблокирована.</Text>
             ) : (
               <>
+                <View style={s.sheetTabs}>
+                  <Pressable
+                    style={[s.sheetTab, topicSheetTab === 'materials' && s.sheetTabOn]}
+                    onPress={() => setTopicSheetTab('materials')}
+                  >
+                    <Text style={[s.sheetTabTxt, topicSheetTab === 'materials' && s.sheetTabTxtOn]}>
+                      Материалы
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[s.sheetTab, topicSheetTab === 'notebook' && s.sheetTabOn]}
+                    onPress={() => setTopicSheetTab('notebook')}
+                  >
+                    <Text style={[s.sheetTabTxt, topicSheetTab === 'notebook' && s.sheetTabTxtOn]}>
+                      Блокнот
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {topicSheetTab === 'notebook' ? (
+                  <View style={s.notesPanel}>
+                    <Text style={s.notesHint}>
+                      Конспект по теме «{String(sheetTopic.title || '')}». Синхронизируется с блокнотом на сайте.
+                    </Text>
+
+                    {noteLoading ? (
+                      <View style={s.noteLoadingRow}>
+                        <ActivityIndicator color={colors.accent} />
+                        <Text style={s.noteLoadingTxt}>Загружаем заметку…</Text>
+                      </View>
+                    ) : (
+                      <>
+                        <TextInput
+                          style={s.notesInput}
+                          value={noteText}
+                          onChangeText={setNoteText}
+                          placeholder="Напишите свои заметки здесь..."
+                          placeholderTextColor={colors.ink3}
+                          multiline
+                          textAlignVertical="top"
+                          editable={!noteSaving}
+                        />
+                        <Pressable
+                          style={[s.saveNoteBtn, (noteSaving || !noteText.trim()) && s.saveNoteBtnOff]}
+                          disabled={noteSaving || !noteText.trim()}
+                          onPress={() => void saveNotebookNote()}
+                        >
+                          {noteSaving ? (
+                            <ActivityIndicator color={colors.surface} />
+                          ) : (
+                            <Text style={s.saveNoteBtnTxt}>Сохранить</Text>
+                          )}
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
+                ) : null}
+
+                {topicSheetTab === 'materials' ? (
+                  <>
                 <Text style={s.modalHint}>
                   Как на сайте: сначала генерируются материалы и вопросы, затем нужно набрать не менее{' '}
                   {QUIZ_PASS_PERCENT}% правильных ответов, чтобы открылась следующая тема.
@@ -812,6 +1031,8 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
                 ) : null}
 
                 {topicSheetError ? <Text style={s.modalSheetErr}>{topicSheetError}</Text> : null}
+                  </>
+                ) : null}
               </>
             )}
           </ScrollView>
@@ -1016,6 +1237,39 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
     modalClose: { fontSize: 16, color: colors.accent, fontWeight: '600' },
     modalTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.ink, paddingHorizontal: 8 },
     modalBody: { padding: 16, paddingBottom: 40 },
+    sheetTabs: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+    sheetTab: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.line,
+      paddingVertical: 10,
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+    },
+    sheetTabOn: { borderColor: colors.accent, backgroundColor: colors.accentMuted },
+    sheetTabTxt: { fontSize: 14, fontWeight: '600', color: colors.ink2 },
+    sheetTabTxtOn: { color: colors.ink, fontWeight: '700' },
+    notesPanel: { gap: 12 },
+    notesHint: { fontSize: 13, color: colors.ink2, lineHeight: 19 },
+    noteLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 24 },
+    noteLoadingTxt: { fontSize: 14, color: colors.ink2, flex: 1 },
+    notesInput: {
+      minHeight: 220,
+      borderWidth: 1,
+      borderColor: colors.line,
+      backgroundColor: colors.surface2,
+      padding: 14,
+      fontSize: 15,
+      lineHeight: 22,
+      color: colors.ink,
+    },
+    saveNoteBtn: {
+      backgroundColor: colors.accent,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    saveNoteBtnOff: { opacity: 0.5 },
+    saveNoteBtnTxt: { color: colors.surface, fontWeight: '700', fontSize: 16 },
     modalHint: { fontSize: 14, color: colors.ink2, lineHeight: 21, marginBottom: 16 },
     theorySection: {
       marginBottom: 20,

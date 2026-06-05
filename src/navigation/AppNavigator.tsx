@@ -12,8 +12,11 @@ import HomeScreen from '../screens/main/HomeScreen';
 import DailyTasksScreen from '../screens/main/DailyTasksScreen';
 import LeaderboardScreen from '../screens/main/LeaderboardScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
+import { FloatingAssistant } from '../components/FloatingAssistant';
 import VacanciesScreen from '../screens/main/VacanciesScreen';
+import VacancyAssessmentScreen from '../screens/main/VacancyAssessmentScreen';
 import VacancyDetailScreen from '../screens/main/VacancyDetailScreen';
+import VacancyInterviewPrepScreen from '../screens/main/VacancyInterviewPrepScreen';
 import CareerDirectionsScreen from '../screens/learn/CareerDirectionsScreen';
 import CareerSessionDetailScreen from '../screens/learn/CareerSessionDetailScreen';
 import CareerSessionsScreen from '../screens/learn/CareerSessionsScreen';
@@ -56,6 +59,16 @@ function VacanciesStackNav() {
     <VacancyStack.Navigator screenOptions={o}>
       <VacancyStack.Screen name="VacanciesList" component={VacanciesScreen} options={{ title: 'Вакансии' }} />
       <VacancyStack.Screen name="VacancyDetail" component={VacancyDetailScreen} options={{ title: '' }} />
+      <VacancyStack.Screen
+        name="VacancyInterviewPrep"
+        component={VacancyInterviewPrepScreen}
+        options={{ title: 'Подготовка' }}
+      />
+      <VacancyStack.Screen
+        name="VacancyAssessment"
+        component={VacancyAssessmentScreen}
+        options={{ title: 'Оценка' }}
+      />
     </VacancyStack.Navigator>
   );
 }
@@ -100,6 +113,7 @@ function LearnStackNav() {
 function MainTabs() {
   const { colors } = useAppTheme();
   return (
+    <>
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
@@ -127,6 +141,8 @@ function MainTabs() {
       <Tab.Screen name="Community" component={CommunityStackNav} options={{ title: 'Сообщество' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Профиль' }} />
     </Tab.Navigator>
+    <FloatingAssistant />
+    </>
   );
 }
 

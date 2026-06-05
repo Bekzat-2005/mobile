@@ -413,6 +413,16 @@ export default function ProfileScreen() {
                 <Text style={s.navRowText}>Тренировка интервью</Text>
                 <Ionicons name="chevron-forward" size={18} color={colors.ink3} />
               </Pressable>
+              <Pressable style={s.navRow} onPress={() => openLearn('Analytics')}>
+                <Ionicons name="stats-chart-outline" size={20} color={colors.accent} />
+                <Text style={s.navRowText}>Аналитика</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.ink3} />
+              </Pressable>
+              <Pressable style={s.navRow} onPress={() => openLearn('Assistant')}>
+                <Ionicons name="sparkles-outline" size={20} color={colors.accent} />
+                <Text style={s.navRowText}>AI-ассистент</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.ink3} />
+              </Pressable>
             </View>
 
             {/* Сессии карьеры */}
