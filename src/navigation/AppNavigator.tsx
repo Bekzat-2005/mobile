@@ -11,7 +11,14 @@ import CommunityScreen from '../screens/main/CommunityScreen';
 import HomeScreen from '../screens/main/HomeScreen';
 import DailyTasksScreen from '../screens/main/DailyTasksScreen';
 import LeaderboardScreen from '../screens/main/LeaderboardScreen';
-import AdminDashboardScreen from '../screens/main/AdminDashboardScreen';
+import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
+import AdminPostDetailScreen from '../screens/admin/AdminPostDetailScreen';
+import AdminPostsScreen from '../screens/admin/AdminPostsScreen';
+import AdminPromptDetailScreen from '../screens/admin/AdminPromptDetailScreen';
+import AdminPromptsScreen from '../screens/admin/AdminPromptsScreen';
+import AdminSystemScreen from '../screens/admin/AdminSystemScreen';
+import AdminUserDetailScreen from '../screens/admin/AdminUserDetailScreen';
+import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import { FloatingAssistant } from '../components/FloatingAssistant';
 import VacanciesScreen from '../screens/main/VacanciesScreen';
@@ -173,6 +180,13 @@ export default function AppNavigator() {
         <RootStack.Screen name="Login" component={LoginScreen} options={{ title: 'Вход' }} />
         <RootStack.Screen name="Register" component={RegisterScreen} options={{ title: 'Регистрация' }} />
         <RootStack.Screen name="AdminDashboard" component={AdminDashboardScreen} options={{ title: 'Админ-панель' }} />
+        <RootStack.Screen name="AdminUsers" component={AdminUsersScreen} options={{ title: 'Пользователи' }} />
+        <RootStack.Screen name="AdminUserDetail" component={AdminUserDetailScreen} options={{ title: 'Пользователь' }} />
+        <RootStack.Screen name="AdminPosts" component={AdminPostsScreen} options={{ title: 'Публикации' }} />
+        <RootStack.Screen name="AdminPostDetail" component={AdminPostDetailScreen} options={{ title: 'Публикация' }} />
+        <RootStack.Screen name="AdminPrompts" component={AdminPromptsScreen} options={{ title: 'Промпты' }} />
+        <RootStack.Screen name="AdminPromptDetail" component={AdminPromptDetailScreen} options={{ title: 'Промпт' }} />
+        <RootStack.Screen name="AdminSystem" component={AdminSystemScreen} options={{ title: 'Система' }} />
       </RootStack.Navigator>
     </NavigationContainer>
   );

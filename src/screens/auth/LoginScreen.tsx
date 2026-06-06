@@ -1,10 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -13,18 +13,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
-
 import type { RootStackParamList } from '../../navigation/types';
+import { authStyles } from './auth-styles';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
   const { colors } = useAppTheme();
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [error, setError] = React.useState('');
   const [pending, setPending] = React.useState(false);
+  const [googlePending, setGooglePending] = React.useState(false);
+
+  const s = authStyles(colors);
 
   async function submit() {
     setError('');
@@ -39,14 +42,46 @@ export default function LoginScreen({ navigation }: Props) {
     }
   }
 
-  const s = styles(colors);
+  async function onGoogle() {
+    setError('');
+    setGooglePending(true);
+    try {
+      await loginWithGoogle();
+      if (navigation.canGoBack()) navigation.goBack();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка Google-входа');
+    } finally {
+      setGooglePending(false);
+    }
+  }
 
   return (
     <SafeAreaView style={s.safe}>
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
         <Text style={s.eyebrow}>Вход</Text>
         <Text style={s.title}>Войди и продолжай.</Text>
-        <Text style={s.subtitle}>Доступ к профилю и вакансиям в одном месте.</Text>
+        <Text style={s.subtitle}>Доступ к профилю, обучению и вакансиям в одном месте.</Text>
+
+        <Pressable
+          style={[s.googleBtn, googlePending && s.btnDisabled]}
+          onPress={onGoogle}
+          disabled={googlePending || pending}
+        >
+          {googlePending ? (
+            <ActivityIndicator color={colors.ink} />
+          ) : (
+            <>
+              <Ionicons name="logo-google" size={20} color={colors.ink} />
+              <Text style={s.googleBtnTxt}>Продолжить через Google</Text>
+            </>
+          )}
+        </Pressable>
+
+        <View style={s.divider}>
+          <View style={s.dividerLine} />
+          <Text style={s.dividerTxt}>или email</Text>
+          <View style={s.dividerLine} />
+        </View>
 
         <View style={s.card}>
           <Text style={s.label}>Почта</Text>
@@ -58,6 +93,7 @@ export default function LoginScreen({ navigation }: Props) {
             keyboardType="email-address"
             value={email}
             onChangeText={setEmail}
+            editable={!pending && !googlePending}
           />
           <Text style={s.label}>Пароль</Text>
           <TextInput
@@ -67,9 +103,18 @@ export default function LoginScreen({ navigation }: Props) {
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            editable={!pending && !googlePending}
           />
-          <Pressable style={[s.btn, pending && s.btnDisabled]} onPress={submit} disabled={pending}>
-            {pending ? <ActivityIndicator color={colors.surface} /> : <Text style={s.btnText}>Войти</Text>}
+          <Pressable
+            style={[s.btn, pending && s.btnDisabled]}
+            onPress={submit}
+            disabled={pending || googlePending}
+          >
+            {pending ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={s.btnText}>Войти</Text>
+            )}
           </Pressable>
         </View>
 
@@ -81,42 +126,4 @@ export default function LoginScreen({ navigation }: Props) {
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
-  return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: colors.surface },
-    scroll: { padding: 24, paddingBottom: 48 },
-    eyebrow: { fontSize: 12, letterSpacing: 2, textTransform: 'uppercase', color: colors.ink3, marginBottom: 8 },
-    title: { fontSize: 28, fontWeight: '600', color: colors.ink, marginBottom: 8 },
-    subtitle: { fontSize: 16, color: colors.ink2, lineHeight: 22, marginBottom: 28 },
-    card: {
-      borderWidth: 1,
-      borderColor: colors.line,
-      padding: 20,
-      backgroundColor: colors.surface2,
-      marginBottom: 16,
-    },
-    label: { fontSize: 13, color: colors.ink2, marginBottom: 6 },
-    input: {
-      borderWidth: 1,
-      borderColor: colors.line,
-      paddingHorizontal: 12,
-      paddingVertical: 12,
-      fontSize: 16,
-      color: colors.ink,
-      backgroundColor: colors.surface,
-      marginBottom: 16,
-    },
-    btn: {
-      backgroundColor: colors.ink,
-      paddingVertical: 14,
-      alignItems: 'center',
-      marginTop: 4,
-    },
-    btnDisabled: { opacity: 0.6 },
-    btnText: { color: colors.surface, fontSize: 16, fontWeight: '600' },
-    error: { color: colors.danger, marginBottom: 12 },
-    link: { color: colors.accent, fontSize: 15, marginTop: 8 },
-  });
 }

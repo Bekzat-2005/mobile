@@ -5,6 +5,13 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   AdminDashboard: undefined;
+  AdminUsers: undefined;
+  AdminUserDetail: { userId: string };
+  AdminPosts: undefined;
+  AdminPostDetail: { postId: string };
+  AdminPrompts: undefined;
+  AdminPromptDetail: { promptKey: string };
+  AdminSystem: undefined;
 };
 
 export type VacanciesStackParamList = {

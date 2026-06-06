@@ -52,6 +52,12 @@ const ROLE: Record<string, string> = {
   admin: 'Администратор',
 };
 
+const USER_STATUS: Record<string, string> = {
+  active: 'Активен',
+  suspended: 'Приостановлен',
+  banned: 'Заблокирован',
+};
+
 function pick(maps: Record<string, string>[], key: string): string | undefined {
   for (const map of maps) {
     if (map[key]) return map[key];
@@ -107,4 +113,9 @@ export function formatSkillLevel(level?: string | null): string {
 export function formatUserRole(role?: string | null): string {
   if (!role) return '—';
   return ROLE[String(role)] || String(role);
+}
+
+export function formatUserStatus(status?: string | null): string {
+  if (!status) return '—';
+  return USER_STATUS[String(status)] || formatStatus(status);
 }

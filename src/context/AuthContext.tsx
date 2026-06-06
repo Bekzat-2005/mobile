@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { Platform } from 'react-native';
 
 import { login as apiLogin, register as apiRegister, type AuthUser } from '../api/auth';
+import { signInWithGoogle } from '../lib/google-auth';
 import { fetchCurrentUser } from '../api/users';
 import { STORAGE_TOKEN_KEY } from '../config';
 
@@ -12,6 +13,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   register: (payload: { email: string; password: string; username: string; name?: string }) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -82,6 +84,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(u);
   }, []);
 
+  const loginWithGoogle = useCallback(async () => {
+    const t = await signInWithGoogle();
+    await writeToken(t);
+    setToken(t);
+    const { user: u } = await fetchCurrentUser(t);
+    setUser(u);
+  }, []);
+
   const register = useCallback(
     async (payload: { email: string; password: string; username: string; name?: string }) => {
       const { token: t, user: u } = await apiRegister(payload);
@@ -103,8 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ token, user, loading, login, register, logout, refreshUser, updateUser }),
-    [token, user, loading, login, register, logout, refreshUser, updateUser],
+    () => ({ token, user, loading, login, loginWithGoogle, register, logout, refreshUser, updateUser }),
+    [token, user, loading, login, loginWithGoogle, register, logout, refreshUser, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
