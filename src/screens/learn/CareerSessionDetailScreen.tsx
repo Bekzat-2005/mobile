@@ -26,6 +26,7 @@ import {
   generateCareerTopicContent,
   retryCareerRoadmapGeneration,
 } from '../../api/career';
+import { AiProcessingOverlay } from '../../components/AiProcessingOverlay';
 import {
   createNotebookNote,
   fetchNotebook,
@@ -188,6 +189,25 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load]);
+
+  /** Сессии «через тест» должны открываться на экране теста, а не здесь. */
+  useEffect(() => {
+    if (!session) return;
+    const st = String(session.status || '');
+    if (st === 'assessment_ready' || st === 'awaiting_skill_confirmation') {
+      navigation.replace('CareerAssessment', { sessionId });
+    }
+  }, [session, sessionId, navigation]);
+
+  /** Пока ИИ генерирует roadmap — подтягиваем сессию с сервера. */
+  useEffect(() => {
+    if (!token || !session) return;
+    if (String(session.status) !== 'roadmap_generating') return;
+    const id = setInterval(() => {
+      void load();
+    }, 8000);
+    return () => clearInterval(id);
+  }, [token, session?.status, load]);
 
   /** Пока ИИ генерирует материалы темы — подтягиваем сессию с сервера. */
   useEffect(() => {
@@ -397,6 +417,15 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
 
   const statusLabel = formatCareerStatus(status);
 
+  const aiMessage =
+    retrying || status === 'roadmap_generating'
+      ? String(gen.message || 'Составляем ваш план развития... ✨')
+      : topicBusy
+        ? 'AI генерирует материалы темы... ✨'
+        : submitBusy
+          ? 'AI проверяет ответы... ✨'
+          : '';
+
   const sheetTopic = topicSheetId ? findTopicById(session, topicSheetId) : null;
   const sheetGen = sheetTopic ? asRecord(sheetTopic.contentGeneration) : {};
   const sheetGenState = String(sheetGen.state || '');
@@ -418,6 +447,10 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
+      <AiProcessingOverlay
+        visible={Boolean(aiMessage) || status === 'roadmap_generating'}
+        message={aiMessage || 'Составляем ваш план развития... ✨'}
+      />
       <ScrollView
         contentContainerStyle={s.scroll}
         refreshControl={
@@ -463,7 +496,21 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
         </View>
 
         {gen?.message && status === 'roadmap_generating' ? (
-          <Text style={s.genMuted}>{String(gen.message)}</Text>
+          <View style={s.card}>
+            <Text style={s.cardEyebrow}>Генерация</Text>
+            <Text style={s.body}>{String(gen.message)}</Text>
+            <Text style={s.genMuted}>ИИ строит персональную дорожную карту. Обычно это занимает 1–2 минуты.</Text>
+          </View>
+        ) : null}
+
+        {status === 'roadmap_generating' && phases.length === 0 ? (
+          <View style={s.card}>
+            <ActivityIndicator color={colors.accent} style={{ marginBottom: 12 }} />
+            <Text style={s.cardTitle}>Строим дорожную карту</Text>
+            <Text style={s.body}>
+              План формируется на основе вашего профиля и результатов. Экран обновится автоматически.
+            </Text>
+          </View>
         ) : null}
 
         {/* Структура: фазы → модули → темы */}
@@ -997,6 +1044,7 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
       textTransform: 'uppercase',
       marginBottom: 10,
     },
+    cardTitle: { fontSize: 17, fontWeight: '700', color: colors.ink, marginBottom: 8 },
     metricRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',

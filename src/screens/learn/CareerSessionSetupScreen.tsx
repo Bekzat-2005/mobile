@@ -13,16 +13,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { LearnStackParamList } from '../../navigation/types';
 import { OnboardingModePicker, type OnboardingMode } from '../../components/learn/OnboardingModePicker';
+import { AiProcessingOverlay } from '../../components/AiProcessingOverlay';
 import { createCareerSession } from '../../api/career';
 import { defaultCareerProfile } from '../../constants/career-defaults';
+import { navigateToCareerSession } from '../../lib/career-navigation';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
 
 type Props = NativeStackScreenProps<LearnStackParamList, 'CareerSessionSetup'>;
-
-function sessionIdOf(s: Record<string, unknown>) {
-  return String(s.id ?? s._id ?? '');
-}
 
 export default function CareerSessionSetupScreen({ route, navigation }: Props) {
   const { directionKey, directionLabel, defaultTargetRole } = route.params;
@@ -53,7 +51,7 @@ export default function CareerSessionSetupScreen({ route, navigation }: Props) {
         },
         token,
       );
-      navigation.replace('CareerSessionDetail', { sessionId: sessionIdOf(session as Record<string, unknown>) });
+      navigateToCareerSession(navigation, session as Record<string, unknown>, { replace: true });
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Не удалось создать план');
     } finally {
@@ -61,8 +59,17 @@ export default function CareerSessionSetupScreen({ route, navigation }: Props) {
     }
   }
 
+  const aiMessage =
+    creating && mode === 'assessment'
+      ? 'Генерируем вступительный тест... ✨'
+      : creating
+        ? 'Составляем ваш план развития... ✨'
+        : '';
+
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
+      <AiProcessingOverlay visible={creating} message={aiMessage} />
+
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
         <Text style={s.eyebrow}>Новый план</Text>
         <Text style={s.title}>{directionLabel}</Text>
@@ -77,6 +84,7 @@ export default function CareerSessionSetupScreen({ route, navigation }: Props) {
           onChangeText={setTargetRole}
           placeholder="Junior Frontend Developer"
           placeholderTextColor={colors.ink3}
+          editable={!creating}
         />
 
         {err ? <Text style={s.err}>{err}</Text> : null}
@@ -85,7 +93,7 @@ export default function CareerSessionSetupScreen({ route, navigation }: Props) {
           {creating ? (
             <ActivityIndicator color={colors.surface} />
           ) : (
-            <Text style={s.btnTxt}>Создать план</Text>
+            <Text style={s.btnTxt}>{mode === 'assessment' ? 'Сгенерировать тест' : 'Создать план'}</Text>
           )}
         </Pressable>
       </ScrollView>
@@ -110,6 +118,7 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
     input: {
       borderWidth: 1,
       borderColor: colors.line,
+      borderRadius: 12,
       padding: 14,
       fontSize: 16,
       color: colors.ink,
@@ -119,6 +128,7 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
     btn: {
       marginTop: 24,
       backgroundColor: colors.accent,
+      borderRadius: 14,
       paddingVertical: 16,
       alignItems: 'center',
     },

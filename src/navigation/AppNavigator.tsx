@@ -18,6 +18,7 @@ import VacanciesScreen from '../screens/main/VacanciesScreen';
 import VacancyAssessmentScreen from '../screens/main/VacancyAssessmentScreen';
 import VacancyDetailScreen from '../screens/main/VacancyDetailScreen';
 import VacancyInterviewPrepScreen from '../screens/main/VacancyInterviewPrepScreen';
+import CareerAssessmentScreen from '../screens/learn/CareerAssessmentScreen';
 import CareerDirectionsScreen from '../screens/learn/CareerDirectionsScreen';
 import CareerSessionSetupScreen from '../screens/learn/CareerSessionSetupScreen';
 import CareerSessionDetailScreen from '../screens/learn/CareerSessionDetailScreen';
@@ -100,6 +101,7 @@ function LearnStackNav() {
       <LearnStack.Screen name="CareerDirections" component={CareerDirectionsScreen} options={{ title: 'План развития' }} />
       <LearnStack.Screen name="CareerSessionSetup" component={CareerSessionSetupScreen} options={{ title: 'Создание плана' }} />
       <LearnStack.Screen name="CareerSessions" component={CareerSessionsScreen} options={{ title: 'Мои планы' }} />
+      <LearnStack.Screen name="CareerAssessment" component={CareerAssessmentScreen} options={{ title: 'Тест' }} />
       <LearnStack.Screen name="CareerSessionDetail" component={CareerSessionDetailScreen} options={{ title: 'Сессия' }} />
       <LearnStack.Screen name="SkillDomains" component={SkillDomainsScreen} options={{ title: 'Оценка навыков' }} />
       <LearnStack.Screen name="SkillSessions" component={SkillSessionsScreen} options={{ title: 'Мои оценки' }} />

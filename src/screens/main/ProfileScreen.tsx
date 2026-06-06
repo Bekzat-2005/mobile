@@ -1,43 +1,38 @@
 import { Ionicons } from '@expo/vector-icons';
+import type { CompositeNavigationProp, NavigatorScreenParams } from '@react-navigation/native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { AuthUser } from '../../api/auth';
+import { ProfileEditModal } from '../../components/ProfileEditModal';
 import { fetchCareerSessions } from '../../api/career';
 import { fetchSkillAssessmentSessions } from '../../api/skill-assessment';
 import { fetchPublicSocialProfile } from '../../api/social';
 import {
   fetchPointsHistory,
-  updateCurrentUserProfile,
   type PointsHistoryEntry,
 } from '../../api/users';
 import { formatCareerStatus, formatSkillStatus, formatUserRole } from '../../lib/status-labels';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
+import type { LearnStackParamList, MainTabParamList, RootStackParamList } from '../../navigation/types';
 
-function splitDisplayName(full?: string) {
-  const parts = String(full || '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (!parts.length) return { firstName: '', lastName: '' };
-  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
-  return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
-}
+type ProfileNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Profile'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 function formatRuDate(iso?: string): string {
   if (!iso) return '';
@@ -74,22 +69,10 @@ function sessionIdOf(s: Record<string, unknown>): string {
   return String(s.id ?? s._id ?? '');
 }
 
-function buildEditForm(user: AuthUser | null) {
-  const { firstName, lastName } = splitDisplayName(user?.name);
-  const contact = user?.contactInfo;
-  return {
-    username: user?.username || '',
-    firstName,
-    lastName,
-    aboutMe: user?.aboutMe || '',
-    github: contact?.github || '',
-  };
-}
-
 export default function ProfileScreen() {
   const { colors, toggle, mode } = useAppTheme();
-  const { user, logout, token, refreshUser } = useAuth();
-  const navigation = useNavigation();
+  const { user, logout, token, refreshUser, updateUser } = useAuth();
+  const navigation = useNavigation<ProfileNavigationProp>();
   const s = styles(colors);
 
   const [extrasLoading, setExtrasLoading] = useState(false);
@@ -102,9 +85,6 @@ export default function ProfileScreen() {
   const [skillSessions, setSkillSessions] = useState<Record<string, unknown>[]>([]);
 
   const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState(buildEditForm(user));
-  const [saveError, setSaveError] = useState('');
-  const [saving, setSaving] = useState(false);
 
   const loadExtras = useCallback(async () => {
     if (!token || !user?.id) {
@@ -140,9 +120,14 @@ export default function ProfileScreen() {
     }, [loadExtras]),
   );
 
-  useEffect(() => {
-    if (!editOpen) setEditForm(buildEditForm(user));
-  }, [user, editOpen]);
+  function openEditProfile() {
+    setEditOpen(true);
+  }
+
+  function handleProfileSaved(updatedUser: AuthUser) {
+    updateUser(updatedUser);
+    void loadExtras();
+  }
 
   const reputationScore = useMemo(() => {
     const rep = socialProfile?.reputation as { score?: number } | undefined;
@@ -161,19 +146,18 @@ export default function ProfileScreen() {
   }, [user]);
 
   const goAuth = (screen: 'Login' | 'Register') => {
-    navigation.navigate(screen as never);
+    navigation.navigate(screen);
   };
 
-  function openLearn(screen: string, params?: Record<string, string>) {
-    if (params) {
-      navigation.navigate('Learn' as never, { screen, params } as never);
-    } else {
-      navigation.navigate('Learn' as never, { screen } as never);
-    }
+  function openLearn(screen: keyof LearnStackParamList, params?: LearnStackParamList[keyof LearnStackParamList]) {
+    navigation.navigate(
+      'Learn',
+      { screen, params } as NavigatorScreenParams<LearnStackParamList>,
+    );
   }
 
   const openLeaderboard = () => {
-    navigation.navigate('Community' as never, { screen: 'Leaderboard' } as never);
+    navigation.navigate('Community', { screen: 'Leaderboard' });
   };
 
   async function onRefresh() {
@@ -187,44 +171,7 @@ export default function ProfileScreen() {
   }
 
   function openAdmin() {
-    navigation.navigate('AdminDashboard' as never);
-  }
-
-  async function saveProfile() {
-    if (!token || !user) return;
-    setSaveError('');
-    setSaving(true);
-    try {
-      const name = [editForm.firstName, editForm.lastName]
-        .map((x) => x.trim())
-        .filter(Boolean)
-        .join(' ');
-      const payload: Record<string, unknown> = {
-        name,
-        username: editForm.username.trim(),
-        aboutMe: editForm.aboutMe.trim(),
-        contactInfo: {
-          phone: user.contactInfo?.phone || '',
-          telegram: user.contactInfo?.telegram || '',
-          linkedin: user.contactInfo?.linkedin || '',
-          github: editForm.github.trim(),
-          visibility: user.contactInfo?.visibility || {
-            phone: false,
-            telegram: false,
-            linkedin: false,
-            github: true,
-          },
-        },
-      };
-      await updateCurrentUserProfile(payload, token);
-      await refreshUser();
-      setEditOpen(false);
-      await loadExtras();
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Не удалось сохранить');
-    } finally {
-      setSaving(false);
-    }
+    navigation.navigate('AdminDashboard');
   }
 
   const careerPreview = careerSessions.slice(0, 4);
@@ -232,7 +179,8 @@ export default function ProfileScreen() {
   const historyPreview = (pointsData?.history || []).slice(0, 8);
 
   return (
-    <SafeAreaView style={s.safe} edges={['top']}>
+    <>
+      <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView
         contentContainerStyle={s.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -273,7 +221,7 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            <Pressable style={s.editProfileBtn} onPress={() => setEditOpen(true)}>
+            <Pressable style={s.editProfileBtn} onPress={openEditProfile}>
               <Ionicons name="create-outline" size={18} color={colors.ink} />
               <Text style={s.editProfileBtnTxt}>Редактировать профиль</Text>
             </Pressable>
@@ -513,77 +461,16 @@ export default function ProfileScreen() {
           </>
         )}
       </ScrollView>
+      </SafeAreaView>
 
-      <Modal
+      <ProfileEditModal
         visible={editOpen}
-        animationType="slide"
-        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
-        onRequestClose={() => setEditOpen(false)}
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={[s.modalHead, { borderBottomColor: colors.line }]}>
-            <Pressable onPress={() => setEditOpen(false)} hitSlop={12}>
-              <Text style={s.modalCancel}>Отмена</Text>
-            </Pressable>
-            <Text style={s.modalTitle}>Редактирование профиля</Text>
-            <Pressable onPress={saveProfile} disabled={saving} hitSlop={12}>
-              {saving ? (
-                <ActivityIndicator color={colors.accent} />
-              ) : (
-                <Text style={s.modalSave}>Сохранить</Text>
-              )}
-            </Pressable>
-          </View>
-          <ScrollView contentContainerStyle={s.modalBody} keyboardShouldPersistTaps="handled">
-            <Text style={s.fieldLbl}>Username</Text>
-            <TextInput
-              style={s.fieldIn}
-              value={editForm.username}
-              autoCapitalize="none"
-              onChangeText={(t) => setEditForm((f) => ({ ...f, username: t }))}
-              placeholder="@username"
-              placeholderTextColor={colors.ink3}
-            />
-            <Text style={s.fieldLbl}>Имя</Text>
-            <TextInput
-              style={s.fieldIn}
-              value={editForm.firstName}
-              onChangeText={(t) => setEditForm((f) => ({ ...f, firstName: t }))}
-              placeholderTextColor={colors.ink3}
-            />
-            <Text style={s.fieldLbl}>Фамилия</Text>
-            <TextInput
-              style={s.fieldIn}
-              value={editForm.lastName}
-              onChangeText={(t) => setEditForm((f) => ({ ...f, lastName: t }))}
-              placeholderTextColor={colors.ink3}
-            />
-            <Text style={s.fieldLbl}>О себе</Text>
-            <TextInput
-              style={[s.fieldIn, s.fieldArea]}
-              value={editForm.aboutMe}
-              onChangeText={(t) => setEditForm((f) => ({ ...f, aboutMe: t }))}
-              multiline
-              placeholder="Кратко о себе и целях"
-              placeholderTextColor={colors.ink3}
-            />
-            <Text style={s.fieldLbl}>Ссылка на GitHub</Text>
-            <TextInput
-              style={s.fieldIn}
-              value={editForm.github}
-              autoCapitalize="none"
-              onChangeText={(t) => setEditForm((f) => ({ ...f, github: t }))}
-              placeholder="https://github.com/username"
-              placeholderTextColor={colors.ink3}
-            />
-            {saveError ? <Text style={s.saveErr}>{saveError}</Text> : null}
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-    </SafeAreaView>
+        user={user}
+        token={token}
+        onClose={() => setEditOpen(false)}
+        onSaved={handleProfileSaved}
+      />
+    </>
   );
 }
 
@@ -767,36 +654,5 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
       alignItems: 'center',
     },
     logoutText: { color: colors.danger, fontWeight: '600', fontSize: 16 },
-    modalHead: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 14,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-    },
-    modalCancel: { fontSize: 16, color: colors.ink2 },
-    modalTitle: { fontSize: 17, fontWeight: '700', color: colors.ink },
-    modalSave: { fontSize: 16, fontWeight: '700', color: colors.accent },
-    modalBody: { padding: 16, paddingBottom: 40 },
-    fieldLbl: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: colors.ink3,
-      textTransform: 'uppercase',
-      letterSpacing: 0.6,
-      marginBottom: 6,
-      marginTop: 12,
-    },
-    fieldIn: {
-      borderWidth: 1,
-      borderColor: colors.line,
-      padding: 12,
-      fontSize: 16,
-      color: colors.ink,
-      backgroundColor: colors.surface2,
-    },
-    fieldArea: { minHeight: 88, textAlignVertical: 'top' },
-    saveErr: { color: colors.danger, marginTop: 16, fontSize: 14 },
   });
 }

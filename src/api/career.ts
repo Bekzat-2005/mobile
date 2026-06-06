@@ -38,6 +38,40 @@ export function createCareerSession(
   });
 }
 
+export type CareerAssessmentAnswer = { questionId: string; answer: string };
+
+export type CareerSkillLevel = { area: string; level: string };
+
+export function submitCareerSession(sessionId: string, answers: CareerAssessmentAnswer[], token: string) {
+  return apiRequest<{ session: Record<string, unknown> }>(`/api/career/sessions/${sessionId}/submit`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ answers }),
+  });
+}
+
+export function confirmCareerSkillLevels(
+  sessionId: string,
+  skillLevels: CareerSkillLevel[],
+  token: string,
+) {
+  return apiRequest<{ session: Record<string, unknown> }>(
+    `/api/career/sessions/${sessionId}/confirm-skills`,
+    {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ skillLevels }),
+    },
+  );
+}
+
+export function switchCareerSessionToZeroStart(sessionId: string, token: string) {
+  return apiRequest<{ session: Record<string, unknown> }>(
+    `/api/career/sessions/${sessionId}/start-from-zero`,
+    { method: 'POST', token },
+  );
+}
+
 export function retryCareerRoadmapGeneration(sessionId: string, token: string) {
   return apiRequest<{ session: Record<string, unknown> }>(`/api/career/sessions/${sessionId}/retry-roadmap`, {
     method: 'POST',

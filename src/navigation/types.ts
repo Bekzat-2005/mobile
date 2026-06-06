@@ -1,3 +1,5 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
 export type RootStackParamList = {
   Main: undefined;
   Login: undefined;
@@ -27,6 +29,7 @@ export type LearnStackParamList = {
     defaultTargetRole?: string;
   };
   CareerSessions: undefined;
+  CareerAssessment: { sessionId: string };
   CareerSessionDetail: { sessionId: string };
   SkillDomains: undefined;
   SkillSessions: undefined;
@@ -36,4 +39,12 @@ export type LearnStackParamList = {
   InterviewSessionDetail: { sessionId: string };
   Analytics: undefined;
   Assistant: undefined;
+};
+
+export type MainTabParamList = {
+  Home: undefined;
+  Vacancies: NavigatorScreenParams<VacanciesStackParamList>;
+  Learn: NavigatorScreenParams<LearnStackParamList>;
+  Community: NavigatorScreenParams<CommunityStackParamList>;
+  Profile: undefined;
 };

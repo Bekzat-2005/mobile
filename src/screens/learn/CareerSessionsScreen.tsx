@@ -12,9 +12,7 @@ import { useAppTheme } from '../../context/ThemeContext';
 
 type Props = NativeStackScreenProps<LearnStackParamList, 'CareerSessions'>;
 
-function sid(row: Record<string, unknown>) {
-  return String(row.id ?? row._id ?? '');
-}
+import { navigateToCareerSession, sessionIdOf } from '../../lib/career-navigation';
 
 function topicProgressPct(item: Record<string, unknown>): number | null {
   const result = item.result as Record<string, unknown> | undefined;
@@ -75,7 +73,7 @@ export default function CareerSessionsScreen({ navigation }: Props) {
     <SafeAreaView style={s.safe} edges={['top']}>
       <FlatList
         data={rows}
-        keyExtractor={(r) => sid(r)}
+        keyExtractor={(r) => sessionIdOf(r)}
         refreshControl={<RefreshControl refreshing={ref} onRefresh={() => { setRef(true); load(); }} />}
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         renderItem={({ item }) => {
@@ -88,7 +86,7 @@ export default function CareerSessionsScreen({ navigation }: Props) {
               statusLabel={formatCareerStatus(String(item.status || ''))}
               progressPct={pct}
               badges={mode !== '—' ? [{ label: mode }] : []}
-              onPress={() => navigation.navigate('CareerSessionDetail', { sessionId: sid(item) })}
+              onPress={() => navigateToCareerSession(navigation, item)}
             />
           );
         }}
