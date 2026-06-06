@@ -5,7 +5,7 @@ import { getApiBaseUrl } from '../config';
 WebBrowser.maybeCompleteAuthSession();
 
 /** Бэкенд разрешает returnTo на 127.0.0.1 (см. skillo-be client-origin.js) */
-const GOOGLE_RETURN_TO = 'http://127.0.0.1/oauth/google/callback';
+const GOOGLE_RETURN_TO = 'http://192.168.3.4:4000';
 
 function parseOAuthHash(url: string): { token?: string; error?: string } {
   const hashIdx = url.indexOf('#');
