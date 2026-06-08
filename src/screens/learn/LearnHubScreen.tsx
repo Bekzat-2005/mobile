@@ -17,8 +17,7 @@ type HubTarget =
   | 'SkillDomains'
   | 'StudyRoadmap'
   | 'InterviewHub'
-  | 'Analytics'
-  | 'Assistant';
+  | 'Analytics';
 
 type CardItem = {
   title: string;
@@ -74,13 +73,6 @@ const cards: CardItem[] = [
     target: 'Analytics',
     icon: 'stats-chart-outline',
   },
-  {
-    title: 'Ассистент',
-    subtitle: 'Чат по обучению и коду',
-    detail: 'Задавайте вопросы по технологиям, карьере и продукту — ответы от ИИ с учётом контекста Skillo.',
-    target: 'Assistant',
-    icon: 'chatbubble-ellipses-outline',
-  },
 ];
 
 export default function LearnHubScreen({ navigation }: Props) {
@@ -108,7 +100,7 @@ export default function LearnHubScreen({ navigation }: Props) {
           <Text style={s.heroEyebrow}>Обучение</Text>
           <Text style={s.heroTitle}>Развитие</Text>
           <Text style={s.heroCopy}>
-            План, оценка навыков, лаборатория, интервью, аналитика и ассистент — те же инструменты, что на сайте Skillo.
+            План, оценка навыков, лаборатория, интервью и аналитика — те же инструменты, что на сайте Skillo. AI-ассистент всегда доступен через кнопку внизу экрана.
           </Text>
           {user ? (
             <Text style={s.sessionLine}>

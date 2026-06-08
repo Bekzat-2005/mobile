@@ -20,7 +20,8 @@ import AdminSystemScreen from '../screens/admin/AdminSystemScreen';
 import AdminUserDetailScreen from '../screens/admin/AdminUserDetailScreen';
 import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
-import { FloatingAssistant } from '../components/FloatingAssistant';
+import { FloatingAIAssistant } from '../components/FloatingAIAssistant';
+import { AssistantOverlayProvider } from '../context/AssistantOverlayContext';
 import VacanciesScreen from '../screens/main/VacanciesScreen';
 import VacancyAssessmentScreen from '../screens/main/VacancyAssessmentScreen';
 import VacancyDetailScreen from '../screens/main/VacancyDetailScreen';
@@ -125,7 +126,7 @@ function LearnStackNav() {
 function MainTabs() {
   const { colors } = useAppTheme();
   return (
-    <>
+    <AssistantOverlayProvider>
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
@@ -153,8 +154,8 @@ function MainTabs() {
       <Tab.Screen name="Community" component={CommunityStackNav} options={{ title: 'Сообщество' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Профиль' }} />
     </Tab.Navigator>
-    <FloatingAssistant />
-    </>
+    <FloatingAIAssistant />
+    </AssistantOverlayProvider>
   );
 }
 
