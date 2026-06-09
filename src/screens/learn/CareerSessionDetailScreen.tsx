@@ -37,6 +37,7 @@ import {
 import { formatCareerStatus, formatTopicStatus } from '../../lib/status-labels';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
+import { cardBackground, cardBorder, cardShadow } from '../../theme/cards';
 
 type Props = NativeStackScreenProps<LearnStackParamList, 'CareerSessionDetail'>;
 
@@ -151,9 +152,9 @@ function findNotebookNoteForCareer(
 
 export default function CareerSessionDetailScreen({ route, navigation }: Props) {
   const { sessionId } = route.params;
-  const { colors } = useAppTheme();
+  const { colors, mode } = useAppTheme();
   const { token, refreshUser } = useAuth();
-  const s = styles(colors);
+  const s = styles(colors, mode);
   const [session, setSession] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [ref, setRef] = useState(false);
@@ -627,72 +628,106 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
                                   const theoryCount = asArray<unknown>(topic.theorySections).length;
                                   const qaCount = asArray<unknown>(topic.qaItems).length;
                                   return (
-                                    <View key={String(topic.id || ti)} style={s.topicCard}>
-                                      <View style={s.topicTop}>
-                                        <Text style={s.topicOrder}>
-                                          {typeof topic.order === 'number' ? topic.order : ti + 1}
-                                        </Text>
-                                        <View style={{ flex: 1, minWidth: 0 }}>
-                                          <Text style={s.topicTitle}>{String(topic.title || 'Тема')}</Text>
-                                          <View style={s.topicBadges}>
-                                            <Text style={[s.topicBadge, st === 'completed' && s.badgeDone]}>
-                                              {stLabel}
+                                    <View key={String(topic.id || ti)} style={s.topicCardOuter}>
+                                      <View style={s.topicCard}>
+                                        <View style={s.topicHeader}>
+                                          <View style={s.topicNumberCircle}>
+                                            <Text style={s.topicOrder}>
+                                              {typeof topic.order === 'number' ? topic.order : ti + 1}
+                                            </Text>
+                                          </View>
+                                          <View style={s.topicHeaderText}>
+                                            <Text style={s.topicTitle} numberOfLines={3}>
+                                              {String(topic.title || 'Тема')}
                                             </Text>
                                             {hours != null ? (
-                                              <Text style={s.topicBadgeMuted}>~{hours} ч</Text>
+                                              <Text style={s.topicDuration}>~{hours} ч</Text>
                                             ) : null}
                                           </View>
+                                          <View style={[s.topicStatusPill, st === 'completed' && s.badgeDone]}>
+                                            <Text
+                                              style={[
+                                                s.topicStatusText,
+                                                st === 'completed' && s.badgeDoneText,
+                                              ]}
+                                            >
+                                              {stLabel}
+                                            </Text>
+                                          </View>
                                         </View>
-                                      </View>
-                                      {st !== 'locked' ? (
-                                        <Pressable
-                                          style={s.topicCta}
-                                          onPress={() => openTopicSheet(String(topic.id))}
-                                        >
-                                          <Ionicons name="school-outline" size={18} color={colors.surface} />
-                                          <Text style={s.topicCtaText}>
-                                            {st === 'completed'
-                                              ? 'Мини-тест и материалы'
-                                              : 'Сгенерировать и пройти мини-тест'}
+
+                                        {topic.objective ? (
+                                          <Text style={s.topicObjective} numberOfLines={4}>
+                                            {String(topic.objective)}
                                           </Text>
-                                        </Pressable>
-                                      ) : null}
-                                      {topic.objective ? (
-                                        <Text style={s.topicObjective}>{String(topic.objective)}</Text>
-                                      ) : null}
-                                      <View style={s.topicMetaRow}>
-                                        {theoryCount > 0 ? (
-                                          <Text style={s.topicMetaChip}>Теория: {theoryCount}</Text>
                                         ) : null}
-                                        {qaCount > 0 ? (
-                                          <Text style={s.topicMetaChip}>Q&A: {qaCount}</Text>
+
+                                        <View style={s.topicMetaRow}>
+                                          {theoryCount > 0 ? (
+                                            <View style={s.topicMetaChipWrap}>
+                                              <Text style={s.topicMetaChip}>Теория: {theoryCount}</Text>
+                                            </View>
+                                          ) : null}
+                                          {qaCount > 0 ? (
+                                            <View style={s.topicMetaChipWrap}>
+                                              <Text style={s.topicMetaChip}>Q&A: {qaCount}</Text>
+                                            </View>
+                                          ) : null}
+                                          {quizzes.length > 0 ? (
+                                            <View style={s.topicMetaChipWrap}>
+                                              <Text style={s.topicMetaChip}>
+                                                Тест: {quizzes.length} вопр.
+                                              </Text>
+                                            </View>
+                                          ) : (
+                                            <Text style={s.topicMetaChipDim}>Тест: после генерации</Text>
+                                          )}
+                                        </View>
+
+                                        {topicPractice.length ? (
+                                          <View style={s.topicSection}>
+                                            <Text style={s.topicPracticeTitle}>Задачи</Text>
+                                            {topicPractice.map((pt, idx) => (
+                                              <Text key={idx} style={s.topicPracticeLine} numberOfLines={2}>
+                                                • {pt}
+                                              </Text>
+                                            ))}
+                                          </View>
                                         ) : null}
-                                        {quizzes.length > 0 ? (
-                                          <Text style={s.topicMetaChip}>Тест: {quizzes.length} вопр.</Text>
+
+                                        {asArray<string>(topic.completionSignals).length ? (
+                                          <View style={s.topicSection}>
+                                            <Text style={s.topicPracticeTitle}>Сигналы завершения</Text>
+                                            {asArray<string>(topic.completionSignals).map((sig, idx) => (
+                                              <Text key={idx} style={s.topicPracticeLine} numberOfLines={2}>
+                                                ✓ {sig}
+                                              </Text>
+                                            ))}
+                                          </View>
+                                        ) : null}
+
+                                        {st !== 'locked' ? (
+                                          <Pressable
+                                            style={({ pressed }) => [
+                                              s.topicCta,
+                                              pressed && s.topicCtaPressed,
+                                            ]}
+                                            onPress={() => openTopicSheet(String(topic.id))}
+                                          >
+                                            <Ionicons name="play-circle-outline" size={20} color={colors.surface} />
+                                            <Text style={s.topicCtaText}>
+                                              {st === 'completed'
+                                                ? 'Материалы и мини-тест'
+                                                : 'Начать урок'}
+                                            </Text>
+                                          </Pressable>
                                         ) : (
-                                          <Text style={s.topicMetaChipDim}>Тест: после генерации</Text>
+                                          <View style={s.topicLockedBar}>
+                                            <Ionicons name="lock-closed-outline" size={16} color={colors.ink3} />
+                                            <Text style={s.topicLockedText}>Завершите предыдущие темы</Text>
+                                          </View>
                                         )}
                                       </View>
-                                      {topicPractice.length ? (
-                                        <>
-                                          <Text style={s.topicPracticeTitle}>Задачи</Text>
-                                          {topicPractice.map((pt, idx) => (
-                                            <Text key={idx} style={s.topicPracticeLine}>
-                                              • {pt}
-                                            </Text>
-                                          ))}
-                                        </>
-                                      ) : null}
-                                      {asArray<string>(topic.completionSignals).length ? (
-                                        <>
-                                          <Text style={s.topicPracticeTitle}>Сигналы завершения</Text>
-                                          {asArray<string>(topic.completionSignals).map((sig, idx) => (
-                                            <Text key={idx} style={s.topicPracticeLine}>
-                                              ✓ {sig}
-                                            </Text>
-                                          ))}
-                                        </>
-                                      ) : null}
                                     </View>
                                   );
                                 })}
@@ -988,7 +1023,7 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
   );
 }
 
-function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
+function styles(colors: ReturnType<typeof useAppTheme>['colors'], mode: 'light' | 'dark') {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.surface },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -1135,57 +1170,138 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
     moduleBody: { paddingHorizontal: 12, paddingBottom: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
     moduleDesc: { fontSize: 13, color: colors.ink2, lineHeight: 19, marginTop: 10 },
     practiceLine: { fontSize: 13, color: colors.ink2, lineHeight: 20, marginBottom: 4 },
+    topicCardOuter: {
+      marginTop: 12,
+      marginBottom: 2,
+      ...cardShadow(mode),
+    },
     topicCard: {
-      marginTop: 10,
-      padding: 12,
+      backgroundColor: cardBackground(colors, mode),
+      borderRadius: 16,
+      padding: 16,
+      ...cardBorder(mode, colors.line),
+    },
+    topicHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    topicNumberCircle: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.accentMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
       borderWidth: 1,
       borderColor: colors.line,
-      backgroundColor: colors.surface2,
     },
-    topicTop: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
     topicOrder: {
-      fontSize: 13,
-      fontWeight: '800',
-      color: colors.accent,
-      minWidth: 22,
-      marginTop: 2,
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.accentSolid,
     },
-    topicTitle: { fontSize: 15, fontWeight: '600', color: colors.ink },
-    topicBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-    topicBadge: {
+    topicHeaderText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    topicTitle: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: colors.ink,
+      lineHeight: 24,
+    },
+    topicDuration: {
+      fontSize: 12,
+      color: colors.ink3,
+      marginTop: 4,
+      fontWeight: '500',
+    },
+    topicStatusPill: {
+      borderRadius: 12,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      backgroundColor: colors.accentMuted,
+      borderWidth: 1,
+      borderColor: colors.line,
+      maxWidth: 110,
+    },
+    topicStatusText: {
       fontSize: 11,
       fontWeight: '700',
+      color: colors.accentSolid,
+      textAlign: 'center',
+    },
+    badgeDone: { backgroundColor: colors.accentMuted, borderColor: colors.success },
+    badgeDoneText: { color: colors.success },
+    topicObjective: {
+      fontSize: 14,
       color: colors.ink2,
+      lineHeight: 20,
+      marginTop: 12,
+    },
+    topicMetaRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 12,
+    },
+    topicMetaChipWrap: {
+      borderRadius: 12,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      backgroundColor: colors.surface3,
       borderWidth: 1,
       borderColor: colors.line,
-      paddingHorizontal: 8,
-      paddingVertical: 2,
     },
-    badgeDone: { borderColor: colors.success, color: colors.success },
-    topicBadgeMuted: { fontSize: 11, color: colors.ink3, marginTop: 2 },
-    topicObjective: { fontSize: 13, color: colors.ink2, lineHeight: 19, marginTop: 8 },
-    topicMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
     topicMetaChip: {
       fontSize: 11,
       fontWeight: '600',
-      color: colors.ink,
-      backgroundColor: colors.accentMuted,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
+      color: colors.ink2,
     },
-    topicMetaChipDim: { fontSize: 11, color: colors.ink3 },
-    topicPracticeTitle: { fontSize: 12, fontWeight: '700', color: colors.ink, marginTop: 10, marginBottom: 4 },
-    topicPracticeLine: { fontSize: 13, color: colors.ink2, lineHeight: 19, marginBottom: 3 },
+    topicMetaChipDim: { fontSize: 11, color: colors.ink3, fontWeight: '500' },
+    topicSection: { marginTop: 12 },
+    topicPracticeTitle: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.ink3,
+      marginBottom: 6,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    topicPracticeLine: {
+      fontSize: 13,
+      color: colors.ink2,
+      lineHeight: 19,
+      marginBottom: 4,
+    },
     topicCta: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      marginTop: 12,
-      paddingVertical: 12,
+      marginTop: 16,
+      paddingVertical: 14,
+      borderRadius: 8,
       backgroundColor: colors.ink,
     },
-    topicCtaText: { color: colors.surface, fontWeight: '700', fontSize: 14 },
+    topicCtaPressed: { opacity: 0.9 },
+    topicCtaText: { color: colors.surface, fontWeight: '700', fontSize: 15 },
+    topicLockedBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginTop: 16,
+      paddingVertical: 14,
+      borderRadius: 8,
+      backgroundColor: colors.surface3,
+      borderWidth: 1,
+      borderColor: colors.line,
+    },
+    topicLockedText: { fontSize: 14, fontWeight: '600', color: colors.ink3 },
     modalRoot: { flex: 1, backgroundColor: colors.surface },
     modalHeader: {
       flexDirection: 'row',

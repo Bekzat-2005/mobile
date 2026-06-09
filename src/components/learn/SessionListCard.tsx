@@ -3,6 +3,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAppTheme } from '../../context/ThemeContext';
+import { cardBackground, cardBorder, cardShadow } from '../../theme/cards';
 
 type Badge = { label: string; accent?: boolean };
 
@@ -16,84 +17,171 @@ type Props = {
 };
 
 export function SessionListCard({ title, subtitle, statusLabel, progressPct, badges = [], onPress }: Props) {
-  const { colors } = useAppTheme();
-  const s = styles(colors);
+  const { colors, mode } = useAppTheme();
+  const s = styles(colors, mode);
   const pct = progressPct != null ? Math.min(100, Math.max(0, progressPct)) : null;
 
   return (
-    <Pressable style={({ pressed }) => [s.card, pressed && { opacity: 0.92 }]} onPress={onPress}>
-      <View style={s.topRow}>
-        <View style={s.textCol}>
-          <Text style={s.title} numberOfLines={2}>
-            {title}
-          </Text>
-          {subtitle ? (
-            <Text style={s.subtitle} numberOfLines={1}>
-              {subtitle}
+    <View style={s.cardOuter}>
+      <Pressable
+        style={({ pressed }) => [s.card, pressed && s.cardPressed]}
+        onPress={onPress}
+        accessibilityRole="button"
+      >
+        <View style={s.headerRow}>
+          <View style={s.textCol}>
+            <Text style={s.title} numberOfLines={2}>
+              {title}
             </Text>
-          ) : null}
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.ink4} />
-      </View>
-
-      <View style={s.metaRow}>
-        <View style={s.statusBadge}>
-          <Text style={s.statusText}>{statusLabel}</Text>
-        </View>
-        {badges.map((b, i) => (
-          <View key={i} style={[s.chip, b.accent && s.chipAccent]}>
-            <Text style={[s.chipText, b.accent && s.chipTextAccent]}>{b.label}</Text>
+            {subtitle ? (
+              <Text style={s.subtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            ) : null}
           </View>
-        ))}
-      </View>
-
-      {pct != null ? (
-        <View style={s.progressWrap}>
-          <View style={s.progressTrack}>
-            <View style={[s.progressFill, { width: `${pct}%` }]} />
+          <View style={s.chevronWrap}>
+            <Ionicons name="chevron-forward" size={20} color={colors.ink4} />
           </View>
-          <Text style={s.progressLbl}>{pct}%</Text>
         </View>
-      ) : null}
-    </Pressable>
+
+        <View style={s.metaRow}>
+          <View style={s.statusBadge}>
+            <Text style={s.statusText}>{statusLabel}</Text>
+          </View>
+          {badges.map((b, i) => (
+            <View key={i} style={[s.chip, b.accent && s.chipAccent]}>
+              <Text style={[s.chipText, b.accent && s.chipTextAccent]}>{b.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {pct != null ? (
+          <View style={s.progressBlock}>
+            <View style={s.progressHeader}>
+              <Text style={s.progressLabel}>Прогресс</Text>
+              <Text style={s.progressValue}>{pct}%</Text>
+            </View>
+            <View style={s.progressTrack}>
+              <View style={[s.progressFill, { width: `${pct}%` }]} />
+            </View>
+          </View>
+        ) : null}
+      </Pressable>
+    </View>
   );
 }
 
-function styles(colors: ReturnType<typeof useAppTheme>['colors']) {
+function styles(colors: ReturnType<typeof useAppTheme>['colors'], mode: 'light' | 'dark') {
   return StyleSheet.create({
-    card: {
-      borderWidth: 1,
-      borderColor: colors.line,
-      padding: 14,
-      marginBottom: 10,
-      backgroundColor: colors.surface2,
+    cardOuter: {
+      marginBottom: 14,
+      ...cardShadow(mode),
     },
-    topRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    textCol: { flex: 1, minWidth: 0 },
-    title: { fontSize: 16, fontWeight: '700', color: colors.ink },
-    subtitle: { fontSize: 13, color: colors.ink3, marginTop: 4 },
-    metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12, alignItems: 'center' },
+    card: {
+      backgroundColor: cardBackground(colors, mode),
+      borderRadius: 16,
+      padding: 16,
+      ...cardBorder(mode, colors.line),
+    },
+    cardPressed: {
+      opacity: 0.94,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    textCol: {
+      flex: 1,
+      minWidth: 0,
+    },
+    title: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: colors.ink,
+      lineHeight: 24,
+    },
+    subtitle: {
+      fontSize: 14,
+      color: colors.ink2,
+      marginTop: 4,
+      lineHeight: 20,
+    },
+    chevronWrap: {
+      width: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    metaRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 14,
+    },
     statusBadge: {
-      paddingVertical: 4,
+      borderRadius: 12,
+      paddingVertical: 5,
       paddingHorizontal: 10,
       backgroundColor: colors.accentMuted,
       borderWidth: 1,
-      borderColor: colors.accent,
+      borderColor: colors.line,
     },
-    statusText: { fontSize: 11, fontWeight: '700', color: colors.accent, textTransform: 'uppercase' },
+    statusText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.accentSolid,
+    },
     chip: {
-      paddingVertical: 4,
-      paddingHorizontal: 8,
+      borderRadius: 12,
+      paddingVertical: 5,
+      paddingHorizontal: 10,
+      backgroundColor: colors.surface3,
       borderWidth: 1,
       borderColor: colors.line,
-      backgroundColor: colors.surface,
     },
-    chipAccent: { borderColor: colors.accentMuted, backgroundColor: colors.accentMuted },
-    chipText: { fontSize: 11, fontWeight: '600', color: colors.ink2 },
-    chipTextAccent: { color: colors.accent },
-    progressWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
-    progressTrack: { flex: 1, height: 4, backgroundColor: colors.line, overflow: 'hidden' },
-    progressFill: { height: '100%', backgroundColor: colors.accent },
-    progressLbl: { fontSize: 12, fontWeight: '700', color: colors.ink3, minWidth: 36, textAlign: 'right' },
+    chipAccent: {
+      backgroundColor: colors.accentMuted,
+      borderColor: colors.line,
+    },
+    chipText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.ink2,
+    },
+    chipTextAccent: {
+      color: colors.accent,
+    },
+    progressBlock: {
+      marginTop: 14,
+    },
+    progressHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+    },
+    progressLabel: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: colors.ink3,
+    },
+    progressValue: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.accentSolid,
+    },
+    progressTrack: {
+      height: 6,
+      backgroundColor: colors.surface3,
+      borderRadius: 3,
+      overflow: 'hidden',
+    },
+    progressFill: {
+      height: '100%',
+      backgroundColor: colors.accentSolid,
+      borderRadius: 3,
+    },
   });
 }
