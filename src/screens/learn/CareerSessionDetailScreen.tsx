@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +27,7 @@ import {
   retryCareerRoadmapGeneration,
 } from '../../api/career';
 import { AiProcessingOverlay } from '../../components/AiProcessingOverlay';
+import { CareerTopicTheoryBottomSheet } from '../../components/learn/CareerTopicTheoryBottomSheet';
 import {
   createNotebookNote,
   fetchNotebook,
@@ -38,6 +39,7 @@ import { formatCareerStatus, formatTopicStatus } from '../../lib/status-labels';
 import { useAuth } from '../../context/AuthContext';
 import { useAppTheme } from '../../context/ThemeContext';
 import { cardBackground, cardBorder, cardShadow } from '../../theme/cards';
+import { radius } from '../../theme/colors';
 
 type Props = NativeStackScreenProps<LearnStackParamList, 'CareerSessionDetail'>;
 
@@ -112,6 +114,35 @@ function findTopicById(sess: Record<string, unknown> | null, topicId: string): R
   return findTopicEntry(sess, topicId)?.topic || null;
 }
 
+function getModuleTopics(
+  sess: Record<string, unknown> | null,
+  topicId: string,
+): { id: string; title: string }[] {
+  const entry = findTopicEntry(sess, topicId);
+  if (!entry) return [];
+  return asArray<Record<string, unknown>>(entry.module.topics).map((t) => ({
+    id: String(t.id),
+    title: String(t.title || ''),
+  }));
+}
+
+function formatEstimatedHours(hours: unknown): string {
+  const n = Number(hours);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  if (n < 1) return `${Math.round(n * 60)} мин`;
+  return `${Number.isInteger(n) ? n : n.toFixed(1)} ч`;
+}
+
+function formatQuizTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function getQuizTimeLimitSeconds(questionCount: number): number {
+  return Math.max(90, questionCount * 90);
+}
+
 function buildCareerNotebookContext(
   session: Record<string, unknown>,
   entry: TopicEntry,
@@ -178,6 +209,13 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
   const [noteTitle, setNoteTitle] = useState('');
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteSaving, setNoteSaving] = useState(false);
+  const [theorySheetOpen, setTheorySheetOpen] = useState(false);
+  const [quizStarted, setQuizStarted] = useState(false);
+  const [quizDeadlineAt, setQuizDeadlineAt] = useState(0);
+  const [quizElapsedSec, setQuizElapsedSec] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const quizExpireTriggered = useRef(false);
+  const quizStartedAtRef = useRef(0);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -308,6 +346,16 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
     }
   }
 
+  function stopQuizTimer(elapsedSec?: number) {
+    if (quizStartedAtRef.current > 0) {
+      const spent = elapsedSec ?? Math.max(0, Math.floor((Date.now() - quizStartedAtRef.current) / 1000));
+      setQuizElapsedSec(spent);
+    }
+    setQuizStarted(false);
+    setQuizDeadlineAt(0);
+    quizExpireTriggered.current = false;
+  }
+
   function openTopicSheet(topicId: string) {
     setTopicSheetError('');
     setLastEvaluation(null);
@@ -316,6 +364,12 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
     setNoteText('');
     setNoteId(null);
     setNoteTitle('');
+    setTheorySheetOpen(false);
+    setQuizStarted(false);
+    setQuizDeadlineAt(0);
+    setQuizElapsedSec(null);
+    quizExpireTriggered.current = false;
+    quizStartedAtRef.current = 0;
     setTopicSheetId(topicId);
   }
 
@@ -328,6 +382,19 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
     setNoteText('');
     setNoteId(null);
     setNoteTitle('');
+    setTheorySheetOpen(false);
+    stopQuizTimer();
+    quizStartedAtRef.current = 0;
+    setQuizElapsedSec(null);
+  }
+
+  function startTopicQuiz(questionCount: number) {
+    setTopicSheetError('');
+    setQuizElapsedSec(null);
+    quizExpireTriggered.current = false;
+    quizStartedAtRef.current = Date.now();
+    setQuizStarted(true);
+    setQuizDeadlineAt(Date.now() + getQuizTimeLimitSeconds(questionCount) * 1000);
   }
 
   async function handleGenerateTopic() {
@@ -344,7 +411,7 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
     }
   }
 
-  async function handleSubmitQuiz() {
+  async function handleSubmitQuiz(allowPartial = false) {
     if (!token || !topicSheetId || !session) return;
     const t = findTopicById(session, topicSheetId);
     if (!t) return;
@@ -353,7 +420,7 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
       questionId: String(q.id),
       answer: quizSelections[String(q.id)]?.trim() || '',
     }));
-    if (answers.some((a) => !a.answer)) {
+    if (!allowPartial && answers.some((a) => !a.answer)) {
       setTopicSheetError('Выберите ответ на каждый вопрос');
       return;
     }
@@ -369,12 +436,36 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
         percentage: res.evaluation.percentage,
       });
       if (res.currentUser) await refreshUser();
+      stopQuizTimer();
     } catch (e) {
       setTopicSheetError(e instanceof Error ? e.message : 'Не удалось отправить ответы');
     } finally {
       setSubmitBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!quizStarted || !quizDeadlineAt) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [quizStarted, quizDeadlineAt]);
+
+  useEffect(() => {
+    if (!quizStarted || !quizDeadlineAt || submitBusy || quizExpireTriggered.current) return;
+    if (Date.now() >= quizDeadlineAt) {
+      quizExpireTriggered.current = true;
+      void handleSubmitQuiz(true);
+    }
+  }, [now, quizStarted, quizDeadlineAt, submitBusy]);
+
+  useEffect(() => {
+    if (!topicSheetId || !session || !quizStarted) return;
+    const topic = findTopicById(session, topicSheetId);
+    if (!topic) return;
+    if (topicProgressionStatus(topic) === 'completed') {
+      stopQuizTimer();
+    }
+  }, [topicSheetId, session, quizStarted]);
 
   async function retry() {
     if (!token) return;
@@ -440,7 +531,21 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
   const sheetTheorySections = sheetTopic
     ? asArray<Record<string, unknown>>(sheetTopic.theorySections)
     : [];
-  const hasTheoryContent = Boolean(sheetTheorySummary || sheetTheorySections.length);
+  const sheetQaItems = sheetTopic ? asArray<Record<string, unknown>>(sheetTopic.qaItems) : [];
+  const hasTheoryContent = Boolean(sheetTheorySummary || sheetTheorySections.length || sheetQaItems.length);
+  const moduleTopics = topicSheetId ? getModuleTopics(session, topicSheetId) : [];
+  const sheetEstimatedLabel = sheetTopic ? formatEstimatedHours(sheetTopic.estimatedHours) : '';
+  const quizTimeLimitSec = getQuizTimeLimitSeconds(sheetQuizQuestions.length);
+  const quizRemainingSec =
+    quizStarted && quizDeadlineAt
+      ? Math.max(0, Math.ceil((quizDeadlineAt - now) / 1000))
+      : quizTimeLimitSec;
+  const quizTimerDanger = quizStarted && quizRemainingSec <= 60;
+  const showLessonTimer = Boolean(sheetTopic && sheetEstimatedLabel && !quizStarted);
+  const showQuizCountdown =
+    quizStarted && sheetQuizQuestions.length > 0 && topicProgressionStatus(sheetTopic || {}) !== 'completed';
+  const topicIsCompleted = sheetTopic ? topicProgressionStatus(sheetTopic) === 'completed' : false;
+  const showQuizElapsed = topicIsCompleted && quizElapsedSec != null;
 
   function onEnhanceTheory() {
     Alert.alert('Дополнить теорию', 'Функция будет доступна в следующей версии.');
@@ -768,11 +873,13 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
         animationType="slide"
         {...(Platform.OS === 'ios' ? ({ presentationStyle: 'pageSheet' } as const) : {})}
         onRequestClose={closeTopicSheet}
+        statusBarTranslucent={false}
       >
-        <KeyboardAvoidingView
-          style={s.modalRoot}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        <SafeAreaView style={s.modalRoot} edges={['top', 'bottom']}>
+          <KeyboardAvoidingView
+            style={s.modalFlex}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
           <View style={s.modalHeader}>
             <Pressable onPress={closeTopicSheet} hitSlop={12}>
               <Text style={s.modalClose}>Закрыть</Text>
@@ -780,8 +887,53 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
             <Text style={s.modalTitle} numberOfLines={1}>
               {sheetTopic ? String(sheetTopic.title || 'Тема') : ''}
             </Text>
-            <View style={{ width: 56 }} />
+            {showQuizCountdown ? (
+              <View style={[s.sheetTimerBox, quizTimerDanger && s.sheetTimerDanger]}>
+                <Ionicons name="time-outline" size={14} color={quizTimerDanger ? colors.danger : colors.ink3} />
+                <Text style={[s.sheetTimerTxt, quizTimerDanger && s.sheetTimerTxtDanger]}>
+                  {formatQuizTime(quizRemainingSec)}
+                </Text>
+              </View>
+            ) : showQuizElapsed ? (
+              <View style={s.sheetTimerBox}>
+                <Ionicons name="checkmark-circle-outline" size={14} color={colors.success} />
+                <Text style={s.sheetTimerTxt}>{formatQuizTime(quizElapsedSec)}</Text>
+              </View>
+            ) : showLessonTimer ? (
+              <View style={s.sheetTimerBox}>
+                <Ionicons name="time-outline" size={14} color={colors.ink3} />
+                <Text style={s.sheetTimerTxt}>~{sheetEstimatedLabel}</Text>
+              </View>
+            ) : (
+              <View style={{ width: 56 }} />
+            )}
           </View>
+
+          {moduleTopics.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.moduleTopicsRow}
+              style={s.moduleTopicsScroll}
+            >
+              {moduleTopics.map((topic) => {
+                const isActive = topic.id === topicSheetId;
+                return (
+                  <Pressable
+                    key={topic.id}
+                    style={[s.moduleTopicPill, isActive && s.moduleTopicPillActive]}
+                    onPress={() => {
+                      if (topic.id !== topicSheetId) openTopicSheet(topic.id);
+                    }}
+                  >
+                    <Text style={[s.moduleTopicPillTxt, isActive && s.moduleTopicPillTxtActive]}>
+                      {topic.title}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : null}
 
           <ScrollView contentContainerStyle={s.modalBody} keyboardShouldPersistTaps="handled">
             {!sheetTopic ? (
@@ -850,6 +1002,25 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
 
                 {topicSheetTab === 'materials' ? (
                   <>
+                {topicIsCompleted ? (
+                  <View style={s.topicDoneCard}>
+                    <View style={s.topicDoneHead}>
+                      <Ionicons name="checkmark-circle" size={28} color={colors.success} />
+                      <View style={s.topicDoneText}>
+                        <Text style={s.topicDoneTitle}>Тема пройдена</Text>
+                        {showQuizElapsed ? (
+                          <Text style={s.topicDoneSub}>
+                            Затрачено на тест: {formatQuizTime(quizElapsedSec!)}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    <Pressable style={s.topicDoneBtn} onPress={closeTopicSheet}>
+                      <Text style={s.topicDoneBtnTxt}>Вернуться в Roadmap</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
                 <Text style={s.modalHint}>
                   Как на сайте: сначала генерируются материалы и вопросы, затем нужно набрать не менее{' '}
                   {QUIZ_PASS_PERCENT}% правильных ответов, чтобы открылась следующая тема.
@@ -890,43 +1061,19 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
                 ) : null}
 
                 {sheetGenState === 'completed' && hasTheoryContent ? (
-                  <>
-                    <View style={s.theorySection}>
-                      <View style={s.theoryHead}>
-                        <View style={s.theoryHeadText}>
-                          <Text style={s.theoryKicker}>теория</Text>
-                          <Text style={s.theoryTitle}>Главная идея</Text>
-                        </View>
-                        <Pressable style={s.theoryEnhanceBtn} onPress={onEnhanceTheory}>
-                          <Text style={s.theoryEnhanceBtnTxt}>Дополнить теорию</Text>
-                        </Pressable>
-                      </View>
-                      {sheetTheorySummary ? (
-                        <Text style={s.theorySummary}>{sheetTheorySummary}</Text>
-                      ) : null}
-                    </View>
-
-                    {sheetTheorySections.length > 0 ? (
-                      <View style={s.blocksSection}>
-                        <Text style={s.blocksTitle}>Разбор по блокам</Text>
-                        <View style={s.blocksList}>
-                          {sheetTheorySections.map((sec, i) => (
-                            <View key={`${String(sec.title || i)}-${i}`} style={s.blockRow}>
-                              <Text style={s.blockNum}>{i + 1}</Text>
-                              <View style={s.blockBody}>
-                                {sec.title ? (
-                                  <Text style={s.blockTitle}>{String(sec.title)}</Text>
-                                ) : null}
-                                {sec.content ? (
-                                  <Text style={s.blockText}>{String(sec.content)}</Text>
-                                ) : null}
-                              </View>
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    ) : null}
-                  </>
+                  <View style={s.theoryTeaser}>
+                    <Text style={s.theoryTeaserTxt} numberOfLines={2}>
+                      {sheetTheorySummary || 'Теория, разбор по блокам и Q&A готовы к изучению.'}
+                    </Text>
+                    <Pressable
+                      style={s.readTheoryBtn}
+                      onPress={() => setTheorySheetOpen(true)}
+                      accessibilityLabel="Дополнительная теория"
+                    >
+                      <Ionicons name="book-outline" size={18} color={colors.accentSolid} />
+                      <Text style={s.readTheoryBtnTxt}>теория</Text>
+                    </Pressable>
+                  </View>
                 ) : null}
 
                 {sheetGenState === 'completed' && sheetQuizQuestions.length === 0 ? (
@@ -967,47 +1114,71 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
                       </View>
                     ) : null}
 
-                    {sheetQuizQuestions.map((q, qi) => {
-                      const qid = String(q.id);
-                      const options = asArray<string>(q.options);
-                      const selected = quizSelections[qid];
-                      return (
-                        <View key={qid || String(qi)} style={s.quizBlock}>
-                          <Text style={s.quizPrompt}>
-                            {typeof q.order === 'number' ? `${q.order}. ` : ''}
-                            {String(q.prompt || '')}
-                          </Text>
-                          {options.map((opt) => (
-                            <Pressable
-                              key={opt}
-                              style={[s.quizOption, selected === opt && s.quizOptionOn]}
-                              onPress={() =>
-                                setQuizSelections((prev) => ({
-                                  ...prev,
-                                  [qid]: opt,
-                                }))
-                              }
-                            >
-                              <Text style={[s.quizOptionText, selected === opt && s.quizOptionTextOn]}>{opt}</Text>
-                            </Pressable>
-                          ))}
-                        </View>
-                      );
-                    })}
+                    {!quizStarted && topicProgressionStatus(sheetTopic) !== 'completed' ? (
+                      <View style={s.quizStartBox}>
+                        <Text style={s.quizStartMeta}>
+                          {sheetQuizQuestions.length} вопросов · {formatQuizTime(quizTimeLimitSec)} на ответы · порог{' '}
+                          {QUIZ_PASS_PERCENT}%
+                        </Text>
+                        <Text style={s.quizStartHint}>
+                          После старта пойдёт таймер. Пустые ответы засчитываются как неверные.
+                        </Text>
+                        <Pressable
+                          style={s.modalPrimary}
+                          onPress={() => startTopicQuiz(sheetQuizQuestions.length)}
+                        >
+                          <Text style={s.modalPrimaryTxt}>Начать тест</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
 
-                    {topicProgressionStatus(sheetTopic) !== 'completed' ? (
+                    {(quizStarted || topicProgressionStatus(sheetTopic) === 'completed')
+                      ? sheetQuizQuestions.map((q, qi) => {
+                          const qid = String(q.id);
+                          const options = asArray<string>(q.options);
+                          const selected = quizSelections[qid];
+                          return (
+                            <View key={qid || String(qi)} style={s.quizBlock}>
+                              <Text style={s.quizPrompt}>
+                                {typeof q.order === 'number' ? `${q.order}. ` : ''}
+                                {String(q.prompt || '')}
+                              </Text>
+                              {options.map((opt) => (
+                                <Pressable
+                                  key={opt}
+                                  style={[s.quizOption, selected === opt && s.quizOptionOn]}
+                                  onPress={() =>
+                                    setQuizSelections((prev) => ({
+                                      ...prev,
+                                      [qid]: opt,
+                                    }))
+                                  }
+                                >
+                                  <Text style={[s.quizOptionText, selected === opt && s.quizOptionTextOn]}>
+                                    {opt}
+                                  </Text>
+                                </Pressable>
+                              ))}
+                            </View>
+                          );
+                        })
+                      : null}
+
+                    {quizStarted && topicProgressionStatus(sheetTopic) !== 'completed' ? (
                       <Pressable
                         style={[s.modalPrimary, submitBusy && { opacity: 0.6 }]}
-                        onPress={handleSubmitQuiz}
+                        onPress={() => void handleSubmitQuiz()}
                         disabled={submitBusy}
                       >
                         <Text style={s.modalPrimaryTxt}>
                           {submitBusy ? 'Проверка…' : 'Отправить ответы'}
                         </Text>
                       </Pressable>
-                    ) : (
+                    ) : null}
+
+                    {!quizStarted && topicProgressionStatus(sheetTopic) === 'completed' ? (
                       <Text style={s.bodyMuted}>Тема уже отмечена как завершённая.</Text>
-                    )}
+                    ) : null}
                   </>
                 ) : null}
 
@@ -1017,7 +1188,25 @@ export default function CareerSessionDetailScreen({ route, navigation }: Props) 
               </>
             )}
           </ScrollView>
-        </KeyboardAvoidingView>
+
+            <CareerTopicTheoryBottomSheet
+              embedded
+              visible={theorySheetOpen}
+              topicTitle={String(sheetTopic?.title || 'Тема')}
+              summary={sheetTheorySummary}
+              sections={sheetTheorySections.map((sec) => ({
+                title: sec.title ? String(sec.title) : undefined,
+                content: sec.content ? String(sec.content) : undefined,
+              }))}
+              qaItems={sheetQaItems.map((qa) => ({
+                question: qa.question ? String(qa.question) : undefined,
+                answer: qa.answer ? String(qa.answer) : undefined,
+              }))}
+              onClose={() => setTheorySheetOpen(false)}
+              onEnhanceTheory={onEnhanceTheory}
+            />
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -1303,6 +1492,7 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors'], mode: 'light' 
     },
     topicLockedText: { fontSize: 14, fontWeight: '600', color: colors.ink3 },
     modalRoot: { flex: 1, backgroundColor: colors.surface },
+    modalFlex: { flex: 1, position: 'relative' },
     modalHeader: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1314,6 +1504,31 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors'], mode: 'light' 
     },
     modalClose: { fontSize: 16, color: colors.accent, fontWeight: '600' },
     modalTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.ink, paddingHorizontal: 8 },
+    sheetTimerBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      minWidth: 56,
+      justifyContent: 'flex-end',
+    },
+    sheetTimerTxt: { fontSize: 13, fontWeight: '700', color: colors.ink2 },
+    sheetTimerDanger: {},
+    sheetTimerTxtDanger: { color: colors.danger },
+    moduleTopicsScroll: {
+      maxHeight: 40,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    moduleTopicsRow: { paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
+    moduleTopicPill: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 16,
+      backgroundColor: colors.surface3,
+    },
+    moduleTopicPillActive: { backgroundColor: colors.accentMuted },
+    moduleTopicPillTxt: { fontSize: 13, fontWeight: '600', color: colors.ink3 },
+    moduleTopicPillTxtActive: { color: colors.accentSolid },
     modalBody: { padding: 16, paddingBottom: 40 },
     sheetTabs: { flexDirection: 'row', gap: 8, marginBottom: 16 },
     sheetTab: {
@@ -1349,51 +1564,47 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors'], mode: 'light' 
     saveNoteBtnOff: { opacity: 0.5 },
     saveNoteBtnTxt: { color: colors.surface, fontWeight: '700', fontSize: 16 },
     modalHint: { fontSize: 14, color: colors.ink2, lineHeight: 21, marginBottom: 16 },
-    theorySection: {
-      marginBottom: 20,
-      paddingLeft: 14,
-      borderLeftWidth: 3,
-      borderLeftColor: colors.accentMuted,
-      gap: 12,
+    theoryTeaser: {
+      marginBottom: 16,
+      padding: 14,
+      borderRadius: radius.sm,
+      backgroundColor: cardBackground(colors, mode),
+      gap: 10,
+      ...cardShadow(mode),
     },
-    theoryHead: {
+    theoryTeaserTxt: { fontSize: 14, color: colors.ink2, lineHeight: 21 },
+    readTheoryBtn: {
       flexDirection: 'row',
-      alignItems: 'flex-start',
-      justifyContent: 'space-between',
-      gap: 12,
-    },
-    theoryHeadText: { flex: 1, gap: 4 },
-    theoryKicker: {
-      fontSize: 11,
-      fontWeight: '700',
-      letterSpacing: 1.6,
-      textTransform: 'uppercase',
-      color: colors.ink3,
-    },
-    theoryTitle: { fontSize: 18, fontWeight: '700', color: colors.ink, lineHeight: 24 },
-    theoryEnhanceBtn: {
-      borderWidth: 1,
-      borderColor: colors.accent,
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 8,
       paddingVertical: 8,
-      paddingHorizontal: 12,
-      backgroundColor: colors.surface,
+      paddingHorizontal: 4,
     },
-    theoryEnhanceBtnTxt: { fontSize: 12, fontWeight: '600', color: colors.accent },
-    theorySummary: { fontSize: 15, color: colors.ink2, lineHeight: 24 },
-    blocksSection: { marginBottom: 24, gap: 14 },
-    blocksTitle: { fontSize: 18, fontWeight: '700', color: colors.ink, lineHeight: 24 },
-    blocksList: { gap: 16 },
-    blockRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-    blockNum: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.ink3,
-      minWidth: 20,
-      marginTop: 2,
+    readTheoryBtnTxt: { fontSize: 14, fontWeight: '600', color: colors.accentSolid },
+    quizStartBox: { gap: 10, marginBottom: 16 },
+    quizStartMeta: { fontSize: 14, fontWeight: '600', color: colors.ink },
+    quizStartHint: { fontSize: 13, color: colors.ink3, lineHeight: 19 },
+    topicDoneCard: {
+      marginBottom: 16,
+      padding: 16,
+      borderRadius: 16,
+      backgroundColor: cardBackground(colors, mode),
+      gap: 14,
+      ...cardShadow(mode),
     },
-    blockBody: { flex: 1, gap: 6 },
-    blockTitle: { fontSize: 16, fontWeight: '700', color: colors.ink, lineHeight: 22 },
-    blockText: { fontSize: 15, color: colors.ink2, lineHeight: 23 },
+    topicDoneHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    topicDoneText: { flex: 1, gap: 4 },
+    topicDoneTitle: { fontSize: 18, fontWeight: '800', color: colors.ink },
+    topicDoneSub: { fontSize: 14, color: colors.ink2 },
+    topicDoneBtn: {
+      minHeight: 48,
+      borderRadius: radius.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.accentSolid,
+    },
+    topicDoneBtnTxt: { fontSize: 15, fontWeight: '700', color: '#ffffff' },
     quizSectionTitle: {
       fontSize: 18,
       fontWeight: '700',
@@ -1447,14 +1658,16 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors'], mode: 'light' 
     quizBlock: { marginBottom: 20 },
     quizPrompt: { fontSize: 15, fontWeight: '600', color: colors.ink, marginBottom: 10, lineHeight: 22 },
     quizOption: {
-      borderWidth: 1,
-      borderColor: colors.line,
-      paddingVertical: 12,
+      minHeight: 52,
+      borderRadius: radius.sm,
+      paddingVertical: 14,
       paddingHorizontal: 14,
       marginBottom: 8,
-      backgroundColor: colors.surface2,
+      justifyContent: 'center',
+      backgroundColor: cardBackground(colors, mode),
+      ...cardShadow(mode),
     },
-    quizOptionOn: { borderColor: colors.accent, backgroundColor: colors.accentMuted },
+    quizOptionOn: { backgroundColor: colors.accentMuted },
     quizOptionText: { fontSize: 15, color: colors.ink2 },
     quizOptionTextOn: { color: colors.ink, fontWeight: '600' },
     modalSheetErr: { color: colors.danger, marginTop: 12, fontSize: 14 },

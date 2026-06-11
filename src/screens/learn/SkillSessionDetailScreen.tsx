@@ -145,6 +145,15 @@ function formatRemainingTime(totalSeconds: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+function getSessionElapsedSeconds(assessment: Record<string, unknown>): number | null {
+  const startedAt = assessment.startedAt;
+  const submittedAt = assessment.submittedAt;
+  if (!startedAt || !submittedAt) return null;
+  const ms = new Date(String(submittedAt)).getTime() - new Date(String(startedAt)).getTime();
+  if (ms <= 0) return null;
+  return Math.floor(ms / 1000);
+}
+
 function getSessionTopics(questions: Record<string, unknown>[]): string[] {
   const seen = new Set<string>();
   const topics: string[] = [];
@@ -385,6 +394,7 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
   const sessionTopics = getSessionTopics(questions);
   const showTestRunner =
     status === 'in_progress' && isStarted && questions.length > 0 && !isCompleted;
+  const elapsedSeconds = getSessionElapsedSeconds(assessment);
   const durationSeconds = estMinutes * 60;
   const remainingSeconds = (() => {
     if (!isStarted || isCompleted) return durationSeconds;
@@ -445,6 +455,11 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
                 <Text style={[s.timerValue, timerDanger && s.timerValueDanger]}>
                   {formatRemainingTime(remainingSeconds)}
                 </Text>
+              </View>
+            ) : isCompleted && elapsedSeconds != null ? (
+              <View style={s.timerBox}>
+                <Text style={s.timerCaption}>Затрачено</Text>
+                <Text style={s.timerValue}>{formatRemainingTime(elapsedSeconds)}</Text>
               </View>
             ) : (
               <Pressable
@@ -521,39 +536,60 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
 
           {isCompleted ? (
             <>
-              <View style={s.card}>
-                <Text style={s.resultScore}>{String(evaluation.overallScore ?? '—')}</Text>
-                <Text style={s.resultScoreSuffix}>из 100</Text>
-                <Text style={s.resultLevel}>
-                  Уровень:{' '}
-                  <Text style={s.resultLevelStrong}>
-                    {formatSkillLevel(String(evaluation.validatedLevel || ''))}
-                  </Text>
-                </Text>
-                {evaluation.summary ? <Text style={s.body}>{String(evaluation.summary)}</Text> : null}
-              </View>
+              <View style={s.resultCard}>
+                <View style={s.resultHead}>
+                  <View style={s.resultHeadText}>
+                    <Text style={s.resultKicker}>{domainTitle}</Text>
+                    <Text style={s.resultTitle}>Тест завершён</Text>
+                  </View>
+                  <View style={s.scoreBox}>
+                    <Text style={s.resultScore}>{String(evaluation.overallScore ?? '—')}</Text>
+                    <Text style={s.resultScoreSuffix}>из 100</Text>
+                  </View>
+                </View>
 
-              <View style={s.statsStack}>
-                <View style={s.statRow}>
-                  <Text style={s.statRowLabel}>Вопросов</Text>
-                  <Text style={s.statRowValue}>{sessionStats.totalQuestions}</Text>
+                <View style={s.resultMetrics}>
+                  <View style={s.resultMetric}>
+                    <Ionicons name="ribbon-outline" size={18} color={colors.accentSolid} />
+                    <View style={s.resultMetricBody}>
+                      <Text style={s.resultMetricLabel}>Подтверждённый уровень</Text>
+                      <Text style={s.resultMetricValue}>
+                        {formatSkillLevel(String(evaluation.validatedLevel || ''))}
+                      </Text>
+                    </View>
+                  </View>
+                  {typeof evaluation.confidenceScore === 'number' ? (
+                    <View style={s.resultMetric}>
+                      <Ionicons name="analytics-outline" size={18} color={colors.accentSolid} />
+                      <View style={s.resultMetricBody}>
+                        <Text style={s.resultMetricLabel}>Уверенность оценки</Text>
+                        <Text style={s.resultMetricValue}>{evaluation.confidenceScore}%</Text>
+                      </View>
+                    </View>
+                  ) : null}
+                  <View style={s.resultMetric}>
+                    <Ionicons name="time-outline" size={18} color={colors.accentSolid} />
+                    <View style={s.resultMetricBody}>
+                      <Text style={s.resultMetricLabel}>Затрачено времени</Text>
+                      <Text style={s.resultMetricValue}>
+                        {elapsedSeconds != null ? formatRemainingTime(elapsedSeconds) : '—'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={s.resultMetric}>
+                    <Ionicons name="help-circle-outline" size={18} color={colors.accentSolid} />
+                    <View style={s.resultMetricBody}>
+                      <Text style={s.resultMetricLabel}>Ответы</Text>
+                      <Text style={s.resultMetricValue}>
+                        {sessionStats.answeredQuestions}/{sessionStats.totalQuestions}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-                <View style={s.statRow}>
-                  <Text style={s.statRowLabel}>Среднее время</Text>
-                  <Text style={s.statRowValue}>{fmtAvgTime(sessionStats.avgTimeSec)}</Text>
-                </View>
-                <View style={s.statRow}>
-                  <Text style={s.statRowLabel}>Теория</Text>
-                  <Text style={s.statRowValue}>
-                    {sessionStats.theoryAnswered}/{sessionStats.theoryTotal}
-                  </Text>
-                </View>
-                <View style={s.statRow}>
-                  <Text style={s.statRowLabel}>Практика</Text>
-                  <Text style={s.statRowValue}>
-                    {sessionStats.practicalAnswered}/{sessionStats.practicalTotal}
-                  </Text>
-                </View>
+
+                {evaluation.summary ? (
+                  <Text style={s.resultSummary}>{String(evaluation.summary)}</Text>
+                ) : null}
               </View>
 
               {Array.isArray(evaluation.strengths) && evaluation.strengths.length ? (
@@ -561,7 +597,7 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
                   <Text style={s.sectionLabel}>Сильные стороны</Text>
                   {(evaluation.strengths as string[]).map((t, i) => (
                     <Text key={i} style={s.bullet}>
-                      {t}
+                      • {t}
                     </Text>
                   ))}
                 </View>
@@ -569,14 +605,51 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
 
               {Array.isArray(evaluation.weakAreas) && evaluation.weakAreas.length ? (
                 <View style={s.card}>
-                  <Text style={s.sectionLabel}>Зоны роста</Text>
+                  <Text style={s.sectionLabel}>Слабые места</Text>
                   {(evaluation.weakAreas as string[]).map((t, i) => (
                     <Text key={i} style={s.bulletMuted}>
-                      {t}
+                      • {t}
                     </Text>
                   ))}
                 </View>
               ) : null}
+
+              {Array.isArray(evaluation.suggestedLearningPath) &&
+              (evaluation.suggestedLearningPath as string[]).length ? (
+                <View style={s.card}>
+                  <Text style={s.sectionLabel}>Что учить дальше</Text>
+                  {(evaluation.suggestedLearningPath as string[]).map((t, i) => (
+                    <Text key={i} style={s.bullet}>
+                      • {t}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+
+              {Array.isArray(evaluation.domainBreakdown) &&
+              (evaluation.domainBreakdown as Record<string, unknown>[]).length ? (
+                <View style={s.card}>
+                  <Text style={s.sectionLabel}>Разбор по зонам</Text>
+                  {(evaluation.domainBreakdown as Record<string, unknown>[]).map((item, i) => (
+                    <View key={`${String(item.skillArea || i)}-${i}`} style={s.breakdownItem}>
+                      <View style={s.breakdownHead}>
+                        <Text style={s.breakdownArea}>{String(item.skillArea || '')}</Text>
+                        <Text style={s.breakdownScore}>{String(item.score ?? '—')}/100</Text>
+                      </View>
+                      {item.feedback ? (
+                        <Text style={s.breakdownFeedback}>{String(item.feedback)}</Text>
+                      ) : null}
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              <Pressable style={s.btnPrimary} onPress={() => navigation.navigate('SkillSessions')}>
+                <Text style={s.btnPrimaryTxt}>Все оценки</Text>
+              </Pressable>
+              <Pressable style={s.btnSecondaryWide} onPress={() => navigation.goBack()}>
+                <Text style={s.btnSecondaryTxt}>Вернуться</Text>
+              </Pressable>
             </>
           ) : null}
 
@@ -687,7 +760,7 @@ export default function SkillSessionDetailScreen({ route, navigation }: Props) {
             </View>
           ) : null}
 
-          {!showTestRunner ? (
+          {!showTestRunner && !isCompleted ? (
             <Pressable style={s.linkBtn} onPress={() => navigation.navigate('SkillSessions')}>
               <Text style={s.linkBtnTxt}>Все оценки</Text>
             </Pressable>
@@ -887,6 +960,50 @@ function styles(colors: ReturnType<typeof useAppTheme>['colors'], mode: 'light' 
       ...shadow,
     },
     navRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch', marginTop: 4 },
+    resultCard: {
+      marginBottom: 12,
+      padding: 16,
+      borderRadius: 16,
+      backgroundColor: cardBg,
+      gap: 16,
+      ...shadow,
+    },
+    resultHead: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    resultHeadText: { flex: 1, gap: 4 },
+    resultKicker: { fontSize: 12, fontWeight: '600', color: colors.ink3, textTransform: 'uppercase' },
+    resultTitle: { fontSize: 22, fontWeight: '800', color: colors.ink, lineHeight: 28 },
+    scoreBox: { alignItems: 'flex-end' },
+    resultMetrics: { gap: 12 },
+    resultMetric: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+    resultMetricBody: { flex: 1, gap: 2 },
+    resultMetricLabel: { fontSize: 12, color: colors.ink3 },
+    resultMetricValue: { fontSize: 15, fontWeight: '700', color: colors.ink },
+    resultSummary: { fontSize: 15, color: colors.ink2, lineHeight: 22 },
+    breakdownItem: {
+      paddingTop: 10,
+      marginTop: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.line,
+      gap: 4,
+    },
+    breakdownHead: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+    breakdownArea: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.ink },
+    breakdownScore: { fontSize: 14, fontWeight: '700', color: colors.accentSolid },
+    breakdownFeedback: { fontSize: 13, color: colors.ink2, lineHeight: 19 },
+    btnSecondaryWide: {
+      minHeight: 48,
+      marginTop: 8,
+      marginBottom: 8,
+      borderRadius: radius.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface3,
+    },
     statsStack: {
       marginBottom: 12,
       padding: 14,
